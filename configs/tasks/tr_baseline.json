@@ -1,0 +1,29 @@
+{
+  "task_id": "tr-baseline-001",
+  "description": "Investigate truncation resonance (TR) based vibration energy harvesting. Goal: achieve PEF >= 100, eta > 0.5, T(Omega_TR) < 0 dB simultaneously.",
+  "mechanism_preference": "truncation_resonance",
+  "excitation": {
+    "type": "base_acceleration",
+    "waveform": "harmonic",
+    "amplitude": 0.5,
+    "amplitude_unit": "g"
+  },
+  "frequency_target": {
+    "band_of_interest": [300, 1000]
+  },
+  "suppression_requirements": {
+    "suppression_metric": "span_wise_transmission",
+    "suppression_location": "downstream of cell N",
+    "max_allowed_transmission": -10,
+    "tr_frequency_exception": true
+  },
+  "harvesting_requirements": {
+    "target_output": "power",
+    "output_type": "peak",
+    "minimum_output": 1.0,
+    "load_topology": "resistive"
+  },
+  "envelope_constraints": {
+    "piezo_material": "PZT-5H"
+  }
+}

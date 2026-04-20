@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VEH Scientist - Cockpit</title>
+    <!-- Fonts: Inter and JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Phosphor icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+    <!-- Top Bar -->
+    <header id="round-control-bar">
+        <div class="top-bar-left">
+            <h1 class="task-title">Task: TR-Based Simultaneous Harvesting and Suppression</h1>
+            <div class="round-badge">Round <span id="current-round-number">1</span></div>
+            <div class="status-indicator">
+                <span class="status-dot"></span>
+                <span id="current-status">Discussing</span>
+            </div>
+        </div>
+        
+        <div class="top-bar-center">
+            <div class="flow-arrow">
+                <span class="step active" data-step="discuss">Discuss</span>
+                <i class="ph ph-caret-right"></i>
+                <span class="step" data-step="verify">Verify</span>
+                <i class="ph ph-caret-right"></i>
+                <span class="step" data-step="memorize">Memorize</span>
+                <i class="ph ph-caret-right"></i>
+                <span class="step" data-step="redesign">Redesign</span>
+            </div>
+        </div>
+
+        <div class="top-bar-right">
+            <div class="budget-meter">
+                <span class="budget-label">Discussion Budget:</span>
+                <span class="budget-value" id="discussion-budget">4 / 6</span>
+            </div>
+            <div class="best-candidate">
+                🏆 Best So Far: <span id="best-candidate-name">None</span>
+            </div>
+            <button id="config-btn" class="btn"><i class="ph ph-sliders"></i> Config</button>
+            <button id="theme-toggle" class="btn"><i class="ph ph-sun"></i> Theme</button>
+            <button id="view-mode-toggle" class="btn"><i class="ph ph-presentation-chart"></i> Presentation</button>
+        </div>
+    </header>
+
+    <main>
+        <!-- LEFT COLUMN: Execution Area -->
+        <section id="execution-area">
+            <!-- Top Left: Discussion -->
+            <div id="discussion-panel" class="panel">
+                <div class="panel-header">
+                    <h2><i class="ph ph-chats-circle"></i> Research Discussion</h2>
+                    <div class="mode-toggle">
+                        <button class="mode-btn active" data-mode="role">Role Agents</button>
+                        <button class="mode-btn" data-mode="llm">Multi-LLM Scientists</button>
+                    </div>
+                </div>
+                <div class="panel-content" id="discussion-content">
+                    <!-- Messages will be injected here -->
+                </div>
+                <!-- Proposal Summary gets appended at the end of the round -->
+                <div id="proposal-anchor" style="padding: 0 20px 20px 20px; flex-shrink: 0;"></div>
+
+                <div id="collab-console">
+                    <div class="collab-console-header">
+                        <div class="session-state-group">
+                            <span id="session-run-state" class="session-state-badge running">Running</span>
+                            <span class="session-help">输入初始任务，或在讨论中途与科学家共探</span>
+                        </div>
+                        <button id="run-toggle" class="btn secondary toggle-btn"><i class="ph ph-pause"></i> <span>Pause</span></button>
+                    </div>
+                    <div class="collab-input-wrapper">
+                        <textarea id="user-task-input" placeholder="例如：先围绕 300–800 Hz 频段做 TR + tuning layer 的共同探索，再比较..."></textarea>
+                        <button id="send-user-input" class="btn primary icon-btn"><i class="ph ph-paper-plane-right"></i></button>
+                    </div>
+                    <div class="collab-console-actions">
+                        <label class="task-checkbox">
+                            <input type="checkbox" id="set-task-checkbox" checked>
+                            <span>设为当前任务标题</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Left: Verification -->
+            <div id="verification-panel" class="panel">
+                <div class="panel-header">
+                    <h2><i class="ph ph-flask"></i> Verification</h2>
+                    <div class="verification-tabs">
+                        <button class="tab-btn active" data-tab="python">L1 Python</button>
+                        <button class="tab-btn" data-tab="matlab">L2 Beam</button>
+                        <button class="tab-btn" data-tab="comsol">L3 COMSOL</button>
+                    </div>
+                </div>
+                <div class="panel-content" id="verification-content">
+                    <!-- Result cards injected here -->
+                </div>
+            </div>
+        </section>
+
+        <!-- RIGHT COLUMN: Memory Panel -->
+        <aside id="memory-panel" class="panel dark-panel">
+            <div class="panel-header">
+                <h2><i class="ph ph-brain"></i> Memory & Knowledge</h2>
+            </div>
+            <div class="panel-content scroll-y">
+                
+                <h3><i class="ph ph-clock-counter-clockwise"></i> Round Timeline</h3>
+                <div id="round-timeline" class="timeline">
+                    <!-- Timeline nodes injected here -->
+                </div>
+
+                <h3><i class="ph ph-books"></i> Persistent Knowledge</h3>
+                <div id="knowledge-cards" class="card-list">
+                    <!-- Knowledge cards injected here -->
+                </div>
+
+                <h3><i class="ph ph-puzzle-piece"></i> Reusable Design Motifs</h3>
+                <div id="design-motifs" class="tag-cloud">
+                    <!-- Motif tags injected here -->
+                </div>
+
+            </div>
+        </aside>
+    </main>
+
+    <!-- Round Controls (floating for demo purposes) -->
+    <div id="demo-controls">
+        <button id="prev-round" class="btn secondary"><i class="ph ph-arrow-left"></i> Previous Round</button>
+        <button id="next-round" class="btn primary">Next Round <i class="ph ph-arrow-right"></i></button>
+    </div>
+
+    <!-- Configuration Modal -->
+    <div id="config-modal" class="modal-overlay hidden">
+        <div class="modal">
+            <div class="modal-header">
+                <h2><i class="ph ph-sliders"></i> Session Configuration</h2>
+                <button id="close-config-modal" class="icon-btn-plain"><i class="ph ph-x"></i></button>
+            </div>
+            <div class="modal-tabs">
+                <button class="config-tab active" data-config-mode="role">Role Agents</button>
+                <button class="config-tab" data-config-mode="llm">Multi-LLM Agents</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Agent Slot</label>
+                    <select id="config-agent-select">
+                        <option value="mechanism">Mechanism Agent</option>
+                        <option value="structure">Structure Agent</option>
+                        <option value="critic">Critic Agent</option>
+                        <option value="paper">Paper Agent</option>
+                        <option value="verifier">Verifier Planner</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>API Format</label>
+                    <select id="config-api-format">
+                        <option value="openai">OpenAI Compatible (Default)</option>
+                        <option value="anthropic">Anthropic</option>
+                        <option value="gemini">Google Gemini</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Base URL</label>
+                    <input type="text" id="config-base-url" placeholder="https://api.openai.com/v1" />
+                </div>
+                <div class="form-group">
+                    <label>API Key</label>
+                    <input type="password" id="config-api-key" placeholder="sk-..." />
+                </div>
+                <div class="form-group">
+                    <label>Model Name</label>
+                    <input type="text" id="config-model-name" placeholder="gpt-4" />
+                </div>
+                <div class="collab-console-actions" style="margin-top: 4px;">
+                    <label class="task-checkbox">
+                        <input type="checkbox" id="config-apply-to-mode" checked>
+                        <span>一键应用到当前视图全部 slots</span>
+                    </label>
+                </div>
+                <div id="config-alert" class="config-alert hidden"></div>
+            </div>
+            <div class="modal-footer">
+                <button id="test-config-btn" class="btn secondary"><i class="ph ph-plugs-connected"></i> Validate</button>
+                <button id="save-config-btn" class="btn primary"><i class="ph ph-floppy-disk"></i> Save & Apply</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="./data.js"></script>
+    <script src="./app.js"></script>
+</body>
+</html>

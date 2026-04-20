@@ -1,0 +1,50 @@
+# VEH Scientist — TR Baseline Task Card
+# Blueprint §5.1: Task Card Layer
+
+task_id: "tr-baseline-001"
+description: >
+  Investigate truncation resonance (TR) based vibration energy harvesting.
+  Goal: under suppression constraints, deliver target current at the TR peak
+  without falling below the equal-constraint conventional beam baseline.
+
+mechanism_preference: truncation_resonance
+
+excitation:
+  type: base_acceleration
+  waveform: harmonic
+  amplitude: 0.5
+  amplitude_unit: g
+
+frequency_target:
+  band_of_interest: [300, 1000]  # Hz
+  primary_target_frequency: null  # auto
+
+suppression_requirements:
+  suppression_metric: span_wise_transmission
+  suppression_location: "downstream of cell N"
+  max_allowed_transmission: -10  # dB
+  tr_frequency_exception: true
+
+harvesting_requirements:
+  target_output: current
+  output_type: time_averaged
+  minimum_output: null
+  minimum_output_unit: A
+  load_topology: resistive_rectified
+  load_value: null  # optimize
+
+envelope_constraints:
+  total_length_m: 1.0
+  piezo_volume_m3: 1.25e-6
+  piezo_material: PZT-5H
+
+comparison_baselines:
+  mechanism_baseline: same_structure_delta_1_PB1
+  engineering_baseline: conventional_uniform_cantilever
+  constraints_locked:
+    - total_mass
+    - total_length
+    - piezo_volume
+    - excitation
+    - load_topology
+    - target_frequency_window

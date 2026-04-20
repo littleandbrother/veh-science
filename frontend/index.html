@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VEH Science Discovery Replay</title>
+  <link rel="stylesheet" href="/frontend/styles.css">
+</head>
+<body>
+  <main class="layout">
+    <header>
+      <h1>VEH Science — Discovery Replay</h1>
+      <p>Executable replay for truncation-resonance discovery, with PDF ingestion, claim graph, L1/L2 solvers, and report artifacts.</p>
+    </header>
+
+    <section class="card controls">
+      <div class="grid2">
+        <label>
+          <span>Task card</span>
+          <input id="task-card" type="text" value="configs/tasks/tr_discover_replay.yaml">
+        </label>
+        <label>
+          <span>Output root</span>
+          <input id="output-dir" type="text" value="results/discovery">
+        </label>
+      </div>
+      <div class="actions">
+        <button id="run-btn">Run replay</button>
+        <button id="refresh-btn">Load latest</button>
+      </div>
+      <pre id="status" class="status">Ready.</pre>
+    </section>
+
+    <section class="card">
+      <h2>Summary</h2>
+      <div id="summary"></div>
+    </section>
+
+    <section class="card">
+      <h2>Stages</h2>
+      <div id="steps" class="step-grid"></div>
+    </section>
+
+    <section class="card">
+      <h2>Claims</h2>
+      <ul id="claims"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Hypotheses</h2>
+      <ul id="hypotheses"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Gap ranking</h2>
+      <div id="gaps"></div>
+    </section>
+
+    <section class="card">
+      <h2>Artifacts</h2>
+      <ul id="artifacts"></ul>
+    </section>
+  </main>
+
+  <script src="/frontend/app.js"></script>
+</body>
+</html>

@@ -130,6 +130,8 @@ class CorpusDocument:
     key_questions: tuple[str, ...] = ()
     seed_claims: tuple[str, ...] = ()
     tags: tuple[str, ...] = ()
+    resolved_path: str = ""
+    exists: bool = False
 
 
 @dataclass(frozen=True)
@@ -299,6 +301,9 @@ class DiscoveryProgramState:
     artifacts: list[ExperimentArtifact] = field(default_factory=list)
     evidence: list[EvidenceRecord] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    summary_metrics: dict[str, Any] = field(default_factory=dict)
+    output_dir: str = ""
     current_focus: str | None = None
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     updated_at: str = field(default_factory=lambda: datetime.now().isoformat())

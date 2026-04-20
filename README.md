@@ -126,3 +126,37 @@ pytest tests/unit/test_discover_taskcard.py \
   tests/unit/test_gap_ranker.py \
   tests/unit/test_replay_tr.py
 ```
+
+
+## Executable Replay and Dashboard
+
+The latest replay layer is no longer planning-only. It now executes:
+
+- corpus resolution with PDF ingestion and gap-statement generation
+- claim-graph extraction grounded in the resolved corpus
+- structured derivation artifacts with SymPy-generated equations
+- an executable L1 diatomic-chain replay for TR, localization, harvesting, and parameter sweeps
+- an executable L2 bilayer Timoshenko-beam replay for stopbands and candidate TR locations
+- ranked gap selection and evidence/report assembly
+- a local frontend/backend dashboard for running the replay interactively
+
+Run the full replay from the CLI:
+
+```bash
+python scripts/run_replay_tr.py configs/tasks/tr_discover_replay.yaml --output-dir results/discovery
+```
+
+Plan only without running solvers:
+
+```bash
+python scripts/run_replay_tr.py configs/tasks/tr_discover_replay.yaml --plan-only
+```
+
+Serve the local dashboard:
+
+```bash
+python scripts/serve_dashboard.py --host 127.0.0.1 --port 8000
+```
+
+The dashboard lets you launch the replay, inspect stages, browse claims and hypotheses,
+see ranked gaps, and open generated artifacts directly from the browser.

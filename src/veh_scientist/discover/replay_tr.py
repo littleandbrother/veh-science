@@ -45,18 +45,18 @@ def build_tr_replay_steps(task: DiscoverTaskCard) -> list[DiscoveryStep]:
             deliverables=("chain_parameter_atlas.json", "chain_figures/"),
         ),
         DiscoveryStep(
-            stage="gap_design",
-            title="Rank usable bandgaps",
-            objective="Score every candidate gap for suppression, localization, harvestability, robustness, and realizability.",
-            tools=("python",),
-            deliverables=("gap_ranking.json", "design_rules.md"),
-        ),
-        DiscoveryStep(
             stage="verification",
             title="Transfer to beam and high-fidelity tools",
             objective="Map the best chain insights to the periodic beam, then reserve MATLAB/COMSOL for shortlisted designs.",
             tools=tuple(task.allowed_tools),
             deliverables=("beam_validation.json", "tool_run_log.json"),
+        ),
+        DiscoveryStep(
+            stage="gap_design",
+            title="Rank usable bandgaps",
+            objective="Score every candidate gap for suppression, localization, harvestability, robustness, and realizability.",
+            tools=("python",),
+            deliverables=("gap_ranking.json", "design_rules.md"),
         ),
         DiscoveryStep(
             stage="reporting",

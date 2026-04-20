@@ -484,6 +484,23 @@ def run_l1_chain_replay(output_dir: str | Path, params: ChainReplayParams | None
             "peak_power_map": matching_map.tolist(),
         },
     )
+    write_json(
+        output_dir / "chain_parameter_atlas.json",
+        {
+            "delta_scan": delta_rows,
+            "alpha_beta_map": {
+                "alpha_values": alpha_values.tolist(),
+                "beta_values": beta_values.tolist(),
+                "tr_frequency_map": alpha_beta_map.tolist(),
+            },
+            "matching_map": {
+                "kappa2_values": kappa_values.tolist(),
+                "epsilon_values": epsilon_values.tolist(),
+                "peak_power_map": matching_map.tolist(),
+            },
+            "N_sweep": n_rows,
+        },
+    )
 
     figures = {
         "dispersion_curve": str(_plot_dispersion(output_dir, q, acoustic, optical, gap_low, gap_high)),

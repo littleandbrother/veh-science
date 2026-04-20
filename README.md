@@ -2,39 +2,32 @@
 
 Mechanism-grounded autonomous vibration energy harvesting (VEH) scientist.
 
-This repository is building toward an agentic research stack for topological-resonance-guided piezoelectric VEH design. The current implementation is centered on a periodic beam benchmark and a multi-fidelity verification workflow spanning analytical, reduced-order, and high-fidelity simulation layers.
+This repository is building toward an agentic research stack for topological/truncation-resonance-guided piezoelectric VEH design. The current implementation is centered on an executable **discovery replay** for the truncation-resonance paper path: corpus ingestion, claim graphing, derivation artifacts, L1 chain replay, L2 beam replay, L3 MATLAB/COMSOL call-chain manifests, anchor-aware gap ranking, report generation, smoke checks, and a local dashboard.
 
 ## Current Scope
 
-- L1 mechanism verification for periodic / diatomic-chain-style screening logic.
-- L2 beam oracle for dispersion, finite-chain response, and harvesting metrics.
-- L3 cross-validation hooks for MATLAB and COMSOL.
-- Agent/runtime/dashboard scaffolding for the broader VEH Scientist system.
-
-The implementation blueprint and roadmap live in:
-
-- `veh_scientist_project_blueprint.md`
-- `veh_scientist_agent_instructions.md`
+- L1 mechanism verification for periodic / diatomic-chain TR screening logic.
+- L2 beam oracle for dispersion, stopbands, finite-beam candidate TRs, and harvesting proxies.
+- L3 validation call chain for MATLAB and COMSOL:
+  - shared request manifests,
+  - MATLAB `.m` driver generation,
+  - COMSOL `mph` bridge invocation,
+  - structured result JSONs,
+  - failure is recorded explicitly when external runtimes are unavailable.
+- Discovery replay runtime, report generator, regression smoke, and local dashboard.
 
 ## Repository Layout
 
 ```text
 src/veh_scientist/
-  agents/        Agent config, definitions, providers, runtime
-  analysis/      Objectives and reporting helpers
-  codesign/      Structure-transducer-electrical translation logic
-  coordinator/   Research loop orchestration
-  critic/        Decision and critique layer
+  coordinator/   Legacy research loop scaffolding
+  discover/      Replay/discovery program, L1/L2/L3, report, smoke, anchors
   interfaces/    Shared schemas
-  mechanism/     Mechanism screening and gating logic
-  memory/        Persistent memory abstractions
-  proposals/     Proposal generation
   taskcard/      Task parsing and validation
-  verifiers/     L1/L2/L3 verification backends
-  web/           Simple dashboard server
+  web/           Local dashboard server
 
-configs/tasks/   Example task cards
-scripts/         Validation, sweep, and dashboard entry scripts
+configs/tasks/   Example discover/replay task cards
+scripts/         Replay, dashboard, report, and smoke entry scripts
 tests/unit/      Unit and stack-level tests
 frontend/        Static dashboard frontend assets
 ```
@@ -44,8 +37,8 @@ frontend/        Static dashboard frontend assets
 Requirements:
 
 - Python 3.10+
-- MATLAB for MATLAB-based validation scripts
-- COMSOL + `mph` for COMSOL-backed validation
+- MATLAB or Octave for live MATLAB validation execution
+- COMSOL + `mph` for live COMSOL-backed validation
 
 Create an environment and install the package:
 
@@ -55,101 +48,42 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-For development tools:
+Development tools:
 
 ```bash
-pip install -e ".[dev]"
+pip install -e "[dev]"
 ```
 
-For COMSOL integration:
+COMSOL integration extras:
 
 ```bash
-pip install -e ".[comsol]"
+pip install -e "[comsol]"
 ```
 
 ## Common Workflows
 
-Run the unit test suite:
-
-```bash
-pytest
-```
-
-Run the Python / MATLAB / COMSOL beam cross-validation workflow:
-
-```bash
-python scripts/beam_oracle_validation.py
-```
-
-Serve the local dashboard:
-
-```bash
-python scripts/serve_dashboard.py
-```
-
-Outputs are typically written under `results/`, which is intentionally excluded from version control.
-
-## Notes
-
-- This repository currently tracks source, scripts, tests, configs, and frontend assets.
-- Large generated artifacts, virtual environments, cached files, and reference-material dumps are ignored.
-- The current research focus is the topological-resonance periodic beam benchmark rather than the full end-to-end autonomous scientist loop.
-
-## Discover / Replay Scaffold
-
-The `tr-science` branch introduces a first-pass discovery-planning layer for
-replaying the truncation-resonance paper development path before wiring the full
-solver stack into it.
-
-New pieces in this branch:
-
-- `DiscoverTaskCard` and related replay/discovery schemas under `interfaces/`
-- task-card parsing and validation for `task_type: discover`
-- `discover/` package for corpus ordering, claim graph building, hypothesis
-  ladder generation, derivation-card generation, gap ranking, and evidence
-  scaffolding
-- `configs/tasks/tr_discover_replay.yaml` as the first end-to-end replay task
-- `scripts/run_replay_tr.py` to materialize a replay program as JSON
-
-Run the replay planner:
-
-```bash
-python scripts/run_replay_tr.py configs/tasks/tr_discover_replay.yaml
-```
-
-Run the new discovery-layer tests:
-
-```bash
-pytest tests/unit/test_discover_taskcard.py \
-  tests/unit/test_hypothesis_ladder.py \
-  tests/unit/test_derivation_cards.py \
-  tests/unit/test_gap_ranker.py \
-  tests/unit/test_replay_tr.py
-```
-
-
-## Executable Replay and Dashboard
-
-The latest replay layer is no longer planning-only. It now executes:
-
-- corpus resolution with PDF ingestion and gap-statement generation
-- claim-graph extraction grounded in the resolved corpus
-- structured derivation artifacts with SymPy-generated equations
-- an executable L1 diatomic-chain replay for TR, localization, harvesting, and parameter sweeps
-- an executable L2 bilayer Timoshenko-beam replay for stopbands and candidate TR locations
-- ranked gap selection and evidence/report assembly
-- a local frontend/backend dashboard for running the replay interactively
-
-Run the full replay from the CLI:
+Run the full replay, including report assembly and regression smoke:
 
 ```bash
 python scripts/run_replay_tr.py configs/tasks/tr_discover_replay.yaml --output-dir results/discovery
 ```
 
-Plan only without running solvers:
+Plan only:
 
 ```bash
 python scripts/run_replay_tr.py configs/tasks/tr_discover_replay.yaml --plan-only
+```
+
+Rebuild the report bundle from an existing run:
+
+```bash
+python scripts/build_discovery_report.py --task-card configs/tasks/tr_discover_replay.yaml --output-dir results/discovery
+```
+
+Re-run the regression smoke checks:
+
+```bash
+python scripts/run_regression_smoke.py --task-card configs/tasks/tr_discover_replay.yaml --output-dir results/discovery
 ```
 
 Serve the local dashboard:
@@ -158,5 +92,55 @@ Serve the local dashboard:
 python scripts/serve_dashboard.py --host 127.0.0.1 --port 8000
 ```
 
-The dashboard lets you launch the replay, inspect stages, browse claims and hypotheses,
-see ranked gaps, and open generated artifacts directly from the browser.
+Run the unit test suite:
+
+```bash
+pytest tests/unit
+```
+
+## L3 Tooling Notes
+
+The L3 layer is no longer a skipped hook. The replay now materializes and attempts real tool invocations:
+
+- MATLAB / Octave:
+  - writes `veh_l3_validate.m`,
+  - writes `matlab_request.json`,
+  - attempts execution via `matlab`, `octave`, or `VEHSCI_MATLAB_CMD`,
+  - captures stdout/stderr and structured result JSON.
+- COMSOL:
+  - writes `comsol_request.json`,
+  - launches the Python `mph` bridge,
+  - captures stdout/stderr and structured result JSON.
+
+If external runtimes are missing, the run is marked **failed** with explicit notes, but the call chain and artifacts are still preserved for reproducibility and later reruns on a properly provisioned machine.
+
+## Dashboard
+
+The dashboard now supports:
+
+- one-click replay execution,
+- recent-run listing,
+- load latest run,
+- report rebuild,
+- smoke rerun,
+- rendering of L3 anchors, gap ranking, tool runs, smoke status, and artifacts.
+
+## Outputs
+
+Replay outputs are written under:
+
+```text
+results/discovery/<task_id>/
+  01_corpus/
+  02_claims/
+  03_hypotheses/
+  04_derivations/
+  05_experiments/
+  06_verification/
+  07_gap_design/
+  08_reporting/
+  09_smoke/
+  program_state.json
+```
+
+Generated artifacts, caches, virtual environments, and large reference dumps are intentionally excluded from version control.

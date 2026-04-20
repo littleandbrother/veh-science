@@ -135,6 +135,21 @@ class CorpusDocument:
 
 
 @dataclass(frozen=True)
+class L3Anchor:
+    """Target frequency / performance anchors used to retune L2 and validate L3."""
+
+    anchor_id: str = field(default_factory=lambda: _gen_id("A-"))
+    label: str = "TR"
+    frequency_hz: float = 0.0
+    band_index: int | None = None
+    stopband_hz: tuple[float, float] | None = None
+    target_power_mw: float | None = None
+    target_transmission_db: float | None = None
+    target_pef: float | None = None
+    note: str = ""
+
+
+@dataclass(frozen=True)
 class DiscoverTaskCard:
     """Top-level task card for replaying or abstracting a research discovery process."""
     task_id: str
@@ -148,6 +163,7 @@ class DiscoverTaskCard:
     allowed_tools: tuple[str, ...] = ("python", "matlab", "comsol", "sympy")
     required_artifacts: tuple[str, ...] = ()
     replay_notes: tuple[str, ...] = ()
+    l3_anchors: tuple[L3Anchor, ...] = ()
     engineering_task: TaskCard | None = None
     schema_version: str = "discover-1.0"
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
@@ -166,6 +182,7 @@ class DiscoveryStep:
         "gap_design",
         "verification",
         "reporting",
+        "smoke",
     ] = "corpus"
     title: str = ""
     objective: str = ""
@@ -265,12 +282,21 @@ class GapCandidate:
     omega_min: float = 0.0
     omega_max: float = 0.0
     tr_frequencies: tuple[float, ...] = ()
+    source: Literal["l1", "l2", "hybrid"] = "l2"
+    center_frequency_hz: float | None = None
+    raw_frequency_hz: float | None = None
+    anchored_frequency_hz: float | None = None
+    matched_anchor_label: str = ""
     suppression_margin: float = 0.0
     localization_score: float = 0.0
     harvestability_score: float = 0.0
     robustness_score: float = 0.0
     realizability_score: float = 0.0
+    target_band_score: float = 0.0
+    anchor_score: float = 0.0
+    l3_alignment_score: float = 0.0
     overall_score: float = 0.0
+    notes: tuple[str, ...] = ()
 
 
 @dataclass
@@ -289,6 +315,7 @@ class DiscoveryProgramState:
         "gap_design",
         "verification",
         "reporting",
+        "smoke",
         "completed",
     ] = "planned"
     corpus_manifest: list[CorpusDocument] = field(default_factory=list)
@@ -303,6 +330,8 @@ class DiscoveryProgramState:
     notes: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     summary_metrics: dict[str, Any] = field(default_factory=dict)
+    l3_validation: dict[str, Any] = field(default_factory=dict)
+    smoke_summary: dict[str, Any] = field(default_factory=dict)
     output_dir: str = ""
     current_focus: str | None = None
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())

@@ -115,6 +115,55 @@ def write_csv(path: str | Path, rows: Iterable[dict[str, Any]], fieldnames: list
     return target
 
 
+
+
+def _coerce_dataclass(cls: type[Any], payload: dict[str, Any]) -> Any:
+    from dataclasses import fields
+
+    names = {field.name for field in fields(cls)}
+    return cls(**{key: payload[key] for key in payload if key in names})
+
+
+def load_program_state(path: str | Path) -> Any:
+    """Load a serialized :class:`DiscoveryProgramState` from JSON."""
+
+    from veh_scientist.interfaces import (
+        ClaimCard,
+        CorpusDocument,
+        DerivationCard,
+        DiscoveryProgramState,
+        DiscoveryStep,
+        EvidenceRecord,
+        ExperimentArtifact,
+        GapCandidate,
+        HypothesisCard,
+        ToolRunRecord,
+    )
+
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    return DiscoveryProgramState(
+        **{key: value for key, value in payload.items() if key not in {
+            "corpus_manifest",
+            "planned_steps",
+            "claim_graph",
+            "hypotheses",
+            "derivations",
+            "gap_candidates",
+            "tool_runs",
+            "artifacts",
+            "evidence",
+        }},
+        corpus_manifest=[_coerce_dataclass(CorpusDocument, item) for item in payload.get("corpus_manifest", [])],
+        planned_steps=[_coerce_dataclass(DiscoveryStep, item) for item in payload.get("planned_steps", [])],
+        claim_graph=[_coerce_dataclass(ClaimCard, item) for item in payload.get("claim_graph", [])],
+        hypotheses=[_coerce_dataclass(HypothesisCard, item) for item in payload.get("hypotheses", [])],
+        derivations=[_coerce_dataclass(DerivationCard, item) for item in payload.get("derivations", [])],
+        gap_candidates=[_coerce_dataclass(GapCandidate, item) for item in payload.get("gap_candidates", [])],
+        tool_runs=[_coerce_dataclass(ToolRunRecord, item) for item in payload.get("tool_runs", [])],
+        artifacts=[_coerce_dataclass(ExperimentArtifact, item) for item in payload.get("artifacts", [])],
+        evidence=[_coerce_dataclass(EvidenceRecord, item) for item in payload.get("evidence", [])],
+    )
+
 def update_step_status(steps: list[DiscoveryStep], stage: str, status: str) -> list[DiscoveryStep]:
     """Return a new step list with the matching stage status replaced."""
 

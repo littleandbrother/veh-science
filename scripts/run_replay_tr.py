@@ -1,4 +1,4 @@
-"""Plan or execute the TR discovery replay workflow from a discover task card."""
+"""Plan or execute the full TR discovery replay workflow, including reporting and smoke."""
 
 from __future__ import annotations
 

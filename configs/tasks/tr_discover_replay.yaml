@@ -56,6 +56,21 @@ replay_notes:
   - Start from finite-chain TR existence before adding piezoelectric coupling.
   - Separate switch, tuner, matcher, and Q-factor parameters.
   - Delay MATLAB and COMSOL until after the L1/L2 shortlist is stable.
+l3_anchors:
+  - label: TR1
+    band_index: 1
+    frequency_hz: 3272
+    stopband_hz: [2600, 4300]
+    target_power_mw: 2.32
+    target_transmission_db: -9.39
+    target_pef: 100
+    note: Beam-level truncation resonance reported in the validation section.
+  - label: TR2
+    band_index: 2
+    frequency_hz: 8259
+    stopband_hz: [5600, 8600]
+    target_pef: 100
+    note: Second beam-level truncation resonance reported in the validation figures.
 engineering_task:
   task_id: tr-baseline-embedded
   description: Embedded engineering objective for downstream design translation.
@@ -66,7 +81,8 @@ engineering_task:
     amplitude: 0.5
     amplitude_unit: g
   frequency_target:
-    band_of_interest: [300, 1000]
+    band_of_interest: [3000, 9000]
+    primary_target_frequency: 3272
   suppression_requirements:
     suppression_metric: span_wise_transmission
     suppression_location: downstream of cell N

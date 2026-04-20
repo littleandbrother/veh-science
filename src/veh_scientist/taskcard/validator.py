@@ -79,6 +79,11 @@ def validate_discover_task_card(card: DiscoverTaskCard) -> list[str]:
         if not doc.path.strip():
             issues.append(f"source_corpus document '{doc.title or doc.document_id}' missing path")
 
+    for anchor in card.l3_anchors:
+        if anchor.frequency_hz <= 0:
+            issues.append(f"l3_anchor '{anchor.label}' must have frequency_hz > 0")
+        if anchor.stopband_hz is not None and anchor.stopband_hz[0] >= anchor.stopband_hz[1]:
+            issues.append(f"l3_anchor '{anchor.label}' stopband_hz lower >= upper")
     if card.engineering_task is not None:
         issues.extend(f"engineering_task.{issue}" for issue in _validate_engineering_task_card(card.engineering_task))
     return issues

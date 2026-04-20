@@ -13,5 +13,8 @@ def test_discovery_runner_executes_and_writes_artifacts(tmp_path: Path) -> None:
     assert program.stage == "completed"
     assert program.gap_candidates
     assert program.artifacts
+    assert program.l3_validation
+    assert program.smoke_summary
+    assert program.smoke_summary["overall_pass"] is True
     assert (tmp_path / task.task_id / "program_state.json").exists()
     assert any(artifact.label == "Discovery report" for artifact in program.artifacts)

@@ -15,13 +15,13 @@ from veh_scientist.discover.utils import ensure_dir, write_csv, write_json
 
 @dataclass(frozen=True)
 class BeamReplayParams:
-    cell_pitch_m: float = 0.18
+    cell_pitch_m: float = 0.02
     layer_split: tuple[float, float] = (0.5, 0.5)
     E_a: float = 70.0e9
     G_a: float = 26.0e9
     rho_a: float = 2700.0
-    E_b: float = 35.0e9
-    G_b: float = 13.0e9
+    E_b: float = 3.5e9
+    G_b: float = 1.3e9
     rho_b: float = 1200.0
     kappa_a: float = 5.0 / 6.0
     kappa_b: float = 5.0 / 6.0
@@ -29,7 +29,7 @@ class BeamReplayParams:
     area_b: float = 1.0e-4
     inertia_a: float = 8.33e-10
     inertia_b: float = 8.33e-10
-    n_cells: int = 6
+    n_cells: int = 12
     piezo_kappa2: float = 0.06
     piezo_epsilon: float = 9.0
     bloch_tol: float = 3.0e-3

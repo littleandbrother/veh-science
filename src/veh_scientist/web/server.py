@@ -10,13 +10,15 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
+from veh_scientist.discover.report import write_report_bundle
 from veh_scientist.discover.runner import DiscoveryRunner
-from veh_scientist.discover.utils import repo_root, resolve_path, to_jsonable
+from veh_scientist.discover.smoke import run_regression_smoke
+from veh_scientist.discover.utils import load_program_state, repo_root, resolve_path, to_jsonable
 from veh_scientist.taskcard import parse_discover_task_card
 
 
 class DashboardHandler(BaseHTTPRequestHandler):
-    server_version = "VEHScienceDashboard/0.1"
+    server_version = "VEHScienceDashboard/0.2"
 
     def _json(self, payload: Any, status: int = HTTPStatus.OK) -> None:
         body = json.dumps(to_jsonable(payload), ensure_ascii=False).encode("utf-8")
@@ -40,6 +42,44 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return {}
         return json.loads(raw.decode("utf-8"))
 
+    def _resolve_program_path(self, parsed_query: dict[str, list[str]]) -> Path:
+        output_dir = parsed_query.get("output_dir", [self.server.default_output_dir])[0]
+        task_id = parsed_query.get("task_id", [""])[0]
+        if not task_id:
+            task_card = parsed_query.get("task_card", [self.server.default_task_card])[0]
+            task = parse_discover_task_card(resolve_path(task_card, base_dir=self.server.repo_root))
+            task_id = task.task_id
+        return Path(output_dir) / task_id / "program_state.json"
+
+    def _run_list(self, output_dir: str | Path) -> list[dict[str, Any]]:
+        root = Path(output_dir)
+        if not root.exists():
+            return []
+        runs: list[dict[str, Any]] = []
+        for candidate in sorted(root.glob("*/program_state.json"), key=lambda path: path.stat().st_mtime, reverse=True):
+            try:
+                program = load_program_state(candidate)
+                runs.append(
+                    {
+                        "task_id": program.task_id,
+                        "stage": program.stage,
+                        "updated_at": program.updated_at,
+                        "output_dir": str(Path(program.output_dir).resolve()) if program.output_dir else str(candidate.parent.resolve()),
+                        "best_gap_anchor": program.summary_metrics.get("best_gap_anchor"),
+                        "smoke_pass": program.summary_metrics.get("smoke_pass"),
+                    }
+                )
+            except Exception:
+                runs.append(
+                    {
+                        "task_id": candidate.parent.name,
+                        "stage": "unknown",
+                        "updated_at": "",
+                        "output_dir": str(candidate.parent.resolve()),
+                    }
+                )
+        return runs
+
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         if parsed.path in {"/", "/index.html"}:
@@ -49,14 +89,33 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return self._serve_static(self.server.frontend_root / rel)
         if parsed.path == "/api/health":
             return self._json({"ok": True, "repo_root": str(self.server.repo_root)})
+        if parsed.path == "/api/defaults":
+            task = parse_discover_task_card(resolve_path(self.server.default_task_card, base_dir=self.server.repo_root))
+            return self._json(
+                {
+                    "ok": True,
+                    "default_task_card": self.server.default_task_card,
+                    "default_output_dir": self.server.default_output_dir,
+                    "task": task,
+                }
+            )
+        if parsed.path == "/api/runs":
+            params = parse_qs(parsed.query)
+            output_dir = params.get("output_dir", [self.server.default_output_dir])[0]
+            return self._json({"ok": True, "runs": self._run_list(output_dir)})
         if parsed.path == "/api/program":
             params = parse_qs(parsed.query)
-            task_id = params.get("task_id", [""])[0]
-            output_dir = params.get("output_dir", [self.server.default_output_dir])[0]
-            path = Path(output_dir) / task_id / "program_state.json"
+            path = self._resolve_program_path(params)
             if not path.exists():
                 return self._json({"ok": False, "error": f"Program state not found: {path}"}, status=HTTPStatus.NOT_FOUND)
             return self._serve_static(path)
+        if parsed.path == "/api/smoke":
+            params = parse_qs(parsed.query)
+            path = self._resolve_program_path(params)
+            if not path.exists():
+                return self._json({"ok": False, "error": f"Program state not found: {path}"}, status=HTTPStatus.NOT_FOUND)
+            program = load_program_state(path)
+            return self._json({"ok": True, "smoke_summary": program.smoke_summary})
         if parsed.path == "/artifact":
             params = parse_qs(parsed.query)
             requested = params.get("path", [""])[0]
@@ -67,19 +126,45 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
-        if parsed.path != "/api/run_replay":
-            return self._json({"ok": False, "error": f"Unknown route: {parsed.path}"}, status=HTTPStatus.NOT_FOUND)
         payload = self._read_json_body()
-        task_card = payload.get("task_card", self.server.default_task_card)
-        output_dir = payload.get("output_dir", self.server.default_output_dir)
-        try:
+        if parsed.path == "/api/run_replay":
+            task_card = payload.get("task_card", self.server.default_task_card)
+            output_dir = payload.get("output_dir", self.server.default_output_dir)
+            try:
+                task_path = resolve_path(task_card, base_dir=self.server.repo_root)
+                task = parse_discover_task_card(task_path)
+                runner = DiscoveryRunner(task, task_card_path=task_path)
+                program = runner.execute(output_dir=output_dir)
+                return self._json({"ok": True, "program": program, "summary": runner.summary()})
+            except Exception as exc:  # noqa: BLE001
+                return self._json({"ok": False, "error": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+        if parsed.path == "/api/rebuild_report":
+            task_card = payload.get("task_card", self.server.default_task_card)
+            output_dir = payload.get("output_dir", self.server.default_output_dir)
             task_path = resolve_path(task_card, base_dir=self.server.repo_root)
             task = parse_discover_task_card(task_path)
-            runner = DiscoveryRunner(task, task_card_path=task_path)
-            program = runner.execute(output_dir=output_dir)
-            return self._json({"ok": True, "program": program, "summary": runner.summary()})
-        except Exception as exc:  # noqa: BLE001
-            return self._json({"ok": False, "error": str(exc)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+            task_id = payload.get("task_id", task.task_id)
+            program_path = Path(output_dir) / task_id / "program_state.json"
+            if not program_path.exists():
+                return self._json({"ok": False, "error": f"Program state not found: {program_path}"}, status=HTTPStatus.NOT_FOUND)
+            program = load_program_state(program_path)
+            report_dir = Path(output_dir) / task_id / "08_reporting"
+            bundle = write_report_bundle(report_dir, task, program)
+            return self._json({"ok": True, "bundle": bundle})
+        if parsed.path == "/api/run_smoke":
+            task_card = payload.get("task_card", self.server.default_task_card)
+            output_dir = payload.get("output_dir", self.server.default_output_dir)
+            task_path = resolve_path(task_card, base_dir=self.server.repo_root)
+            task = parse_discover_task_card(task_path)
+            task_id = payload.get("task_id", task.task_id)
+            program_path = Path(output_dir) / task_id / "program_state.json"
+            if not program_path.exists():
+                return self._json({"ok": False, "error": f"Program state not found: {program_path}"}, status=HTTPStatus.NOT_FOUND)
+            program = load_program_state(program_path)
+            smoke_dir = Path(output_dir) / task_id / "09_smoke"
+            smoke_summary = run_regression_smoke(task, program, smoke_dir)
+            return self._json({"ok": True, "smoke_summary": smoke_summary})
+        return self._json({"ok": False, "error": f"Unknown route: {parsed.path}"}, status=HTTPStatus.NOT_FOUND)
 
     def _serve_static(self, path: Path, must_be_safe: bool = False) -> None:
         candidate = path if path.is_absolute() else (self.server.repo_root / path)

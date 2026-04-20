@@ -10,7 +10,7 @@
   <main class="layout">
     <header>
       <h1>VEH Science — Discovery Replay</h1>
-      <p>Executable replay for truncation-resonance discovery, with PDF ingestion, claim graph, L1/L2 solvers, and report artifacts.</p>
+      <p>Executable replay for truncation-resonance discovery, including PDF ingestion, claim graph, L1/L2 solvers, real MATLAB/COMSOL call-chain manifests, report generation, and regression smoke.</p>
     </header>
 
     <section class="card controls">
@@ -24,11 +24,20 @@
           <input id="output-dir" type="text" value="results/discovery">
         </label>
       </div>
-      <div class="actions">
+      <div class="actions wrap">
         <button id="run-btn">Run replay</button>
         <button id="refresh-btn">Load latest</button>
+        <button id="rebuild-report-btn">Rebuild report</button>
+        <button id="smoke-btn">Run smoke</button>
+        <button id="runs-btn">Refresh runs</button>
       </div>
+      <div id="task-meta" class="meta"></div>
       <pre id="status" class="status">Ready.</pre>
+    </section>
+
+    <section class="card">
+      <h2>Recent runs</h2>
+      <div id="runs"></div>
     </section>
 
     <section class="card">
@@ -42,6 +51,26 @@
     </section>
 
     <section class="card">
+      <h2>L3 anchors</h2>
+      <div id="anchors"></div>
+    </section>
+
+    <section class="card">
+      <h2>Gap ranking</h2>
+      <div id="gaps"></div>
+    </section>
+
+    <section class="card">
+      <h2>Tool runs</h2>
+      <div id="tool-runs"></div>
+    </section>
+
+    <section class="card">
+      <h2>Regression smoke</h2>
+      <div id="smoke"></div>
+    </section>
+
+    <section class="card">
       <h2>Claims</h2>
       <ul id="claims"></ul>
     </section>
@@ -49,11 +78,6 @@
     <section class="card">
       <h2>Hypotheses</h2>
       <ul id="hypotheses"></ul>
-    </section>
-
-    <section class="card">
-      <h2>Gap ranking</h2>
-      <div id="gaps"></div>
     </section>
 
     <section class="card">

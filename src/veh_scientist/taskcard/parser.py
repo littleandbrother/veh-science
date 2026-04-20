@@ -21,6 +21,7 @@ from veh_scientist.interfaces.schemas import (
     ExcitationSpec,
     FrequencyTarget,
     HarvestingSpec,
+    L3Anchor,
     SuppressionSpec,
     TaskCard,
 )
@@ -206,12 +207,33 @@ def _build_corpus_document(raw: Any) -> CorpusDocument:
     )
 
 
+
+def _build_l3_anchor(raw: Any) -> L3Anchor:
+    if not isinstance(raw, dict):
+        raise ValueError(f"Each l3_anchors entry must be a mapping, got {type(raw).__name__}")
+    stopband = raw.get("stopband_hz")
+    stopband_tuple = None
+    if stopband is not None:
+        stopband_tuple = tuple(float(v) for v in stopband)
+    return L3Anchor(
+        anchor_id=str(raw.get("anchor_id", "")) or L3Anchor().anchor_id,
+        label=str(raw.get("label", "TR")),
+        frequency_hz=float(raw.get("frequency_hz", 0.0)),
+        band_index=int(raw["band_index"]) if raw.get("band_index") is not None else None,
+        stopband_hz=stopband_tuple,
+        target_power_mw=_optional_float(raw.get("target_power_mw")),
+        target_transmission_db=_optional_float(raw.get("target_transmission_db")),
+        target_pef=_optional_float(raw.get("target_pef")),
+        note=str(raw.get("note", "")),
+    )
+
 def _build_discover_task_card(data: dict[str, Any]) -> DiscoverTaskCard:
     engineering_task = None
     if data.get("engineering_task") is not None:
         engineering_task = _build_task_card(data["engineering_task"])
 
     corpus = tuple(_build_corpus_document(item) for item in data.get("source_corpus", ()))
+    anchors = tuple(_build_l3_anchor(item) for item in data.get("l3_anchors", ()))
     milestones = _string_tuple(
         data.get(
             "milestones",
@@ -261,5 +283,6 @@ def _build_discover_task_card(data: dict[str, Any]) -> DiscoverTaskCard:
         allowed_tools=_string_tuple(data.get("allowed_tools"), ("python", "matlab", "comsol", "sympy")),
         required_artifacts=required_artifacts,
         replay_notes=_string_tuple(data.get("replay_notes")),
+        l3_anchors=anchors,
         engineering_task=engineering_task,
     )

@@ -1,0 +1,85 @@
+task_type: discover
+task_id: tr-discover-replay-001
+description: >
+  Replay the discovery path that leads from precursor truncation-resonance papers
+  to our synergistic vibration-suppression and energy-harvesting paper.
+discovery_mode: replay
+mechanism_focus: truncation_resonance
+research_question: >
+  How do we move from an initial TR-based vibration-suppression idea to a full,
+  publication-grade mechanism, derivation, parameter map, and beam-level design
+  rule set for simultaneous suppression and harvesting?
+source_corpus:
+  - title: Synergistic Vibration Suppression and Energy Harvesting using Truncation Resonance
+    path: truncation_resonance.pdf
+    role: target_paper
+    source_type: pdf
+    summary: Target paper to replay from introduction to beam validation.
+    seed_claims:
+      - TR is a boundary-localized resonant state inside a bandgap.
+      - Piezoelectric harvesting should be co-located with the TR hotspot.
+    tags: [tr, bandgap, harvesting, suppression]
+  - title: Blueprint for truncation resonance placement in elastic diatomic lattices with unit cell asymmetry
+    path: refs/al_babaa_2024.pdf
+    role: reference_paper
+    source_type: pdf
+    summary: Prior mechanism paper for TR appearance conditions and boundary asymmetry.
+    tags: [tr, lattice, asymmetry]
+  - title: Theory of truncation resonances in continuum rod-based phononic crystals with generally asymmetric unit cells
+    path: refs/al_babaa_2023.pdf
+    role: reference_paper
+    source_type: pdf
+    summary: Continuum precursor for transfer to beam-style models.
+    tags: [continuum, tr, beam]
+milestones:
+  - claim_graph
+  - hypothesis_ladder
+  - derivation_cards
+  - l1_chain_replay
+  - gap_ranking
+  - beam_transfer
+  - discovery_report
+target_outcomes:
+  - claim_graph.json
+  - hypothesis_ladder.md
+  - derivation_report.md
+  - gap_ranking.json
+  - discovery_report.md
+allowed_tools: [python, matlab, comsol, sympy]
+required_artifacts:
+  - claim_graph.json
+  - derivation_report.md
+  - chain_parameter_atlas.json
+  - gap_ranking.json
+  - evidence_matrix.json
+replay_notes:
+  - Start from finite-chain TR existence before adding piezoelectric coupling.
+  - Separate switch, tuner, matcher, and Q-factor parameters.
+  - Delay MATLAB and COMSOL until after the L1/L2 shortlist is stable.
+engineering_task:
+  task_id: tr-baseline-embedded
+  description: Embedded engineering objective for downstream design translation.
+  mechanism_preference: truncation_resonance
+  excitation:
+    type: base_acceleration
+    waveform: harmonic
+    amplitude: 0.5
+    amplitude_unit: g
+  frequency_target:
+    band_of_interest: [300, 1000]
+  suppression_requirements:
+    suppression_metric: span_wise_transmission
+    suppression_location: downstream of cell N
+    max_allowed_transmission: -10
+    tr_frequency_exception: true
+  harvesting_requirements:
+    target_output: power
+    output_type: peak
+    minimum_output: null
+    minimum_output_unit: mW
+    load_topology: resistive
+    load_value: null
+  envelope_constraints:
+    total_length_m: 1.0
+    piezo_volume_m3: 1.25e-6
+    piezo_material: PZT-5H

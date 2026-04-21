@@ -26,6 +26,30 @@ def _first_existing(paths: list[str]) -> str | None:
     return None
 
 
+def _git_worktree_roots() -> list[Path]:
+    try:
+        process = subprocess.run(
+            ["git", "worktree", "list", "--porcelain"],
+            cwd=repo_root(),
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except Exception:  # noqa: BLE001
+        return []
+    if process.returncode != 0:
+        return []
+    roots: list[Path] = []
+    for line in process.stdout.splitlines():
+        if not line.startswith("worktree "):
+            continue
+        path = line.partition(" ")[2].strip()
+        if path:
+            roots.append(Path(path).expanduser().resolve())
+    return roots
+
+
 def _find_matlab_binary() -> str | None:
     env_path = os.environ.get("VEHSCI_MATLAB_BIN")
     if env_path:
@@ -68,13 +92,15 @@ def _find_comsol_python() -> str | None:
     if env_path:
         candidates.append(env_path)
     root = repo_root()
-    candidates.extend(
-        [
-            str(root / ".venv312" / "bin" / "python"),
-            str(root / ".venv" / "bin" / "python"),
-            sys.executable,
-        ]
-    )
+    search_roots = [root, *_git_worktree_roots()]
+    for candidate_root in search_roots:
+        candidates.extend(
+            [
+                str(candidate_root / ".venv312" / "bin" / "python"),
+                str(candidate_root / ".venv" / "bin" / "python"),
+            ]
+        )
+    candidates.append(sys.executable)
     seen: set[str] = set()
     for candidate in candidates:
         if not candidate:
@@ -92,14 +118,17 @@ def _find_comsol_model() -> str:
     env_path = os.environ.get("VEHSCI_COMSOL_MODEL")
     if env_path:
         return env_path
-    root = repo_root()
-    model = _first_existing(
-        [
-            str(root / "results" / "beam_oracle_validation" / "periodic_piezo_beam.mph"),
-            str(root / "results" / "phase4" / "periodic_beam.mph"),
-            str(root / "results" / "phase4" / "periodic_beam_struct.mph"),
-        ]
-    )
+    roots = [repo_root(), *_git_worktree_roots()]
+    candidates: list[str] = []
+    for root in roots:
+        candidates.extend(
+            [
+                str(root / "results" / "beam_oracle_validation" / "periodic_piezo_beam.mph"),
+                str(root / "results" / "phase4" / "periodic_beam.mph"),
+                str(root / "results" / "phase4" / "periodic_beam_struct.mph"),
+            ]
+        )
+    model = _first_existing(candidates)
     return model or ""
 
 
@@ -581,6 +610,8 @@ def run_l3_validation_suite(
             "request_manifest": str(request_path.resolve()),
             "consensus_alignment": str(consensus_path.resolve()),
             "summary": str(summary_path.resolve()),
+            "matlab_result": str((output_dir / "matlab" / "matlab_result.json").resolve()),
+            "comsol_result": str((output_dir / "comsol" / "comsol_result.json").resolve()),
             "calibration_summary": str((output_dir / "calibration" / "calibration_summary.json").resolve()),
             "calibrated_l2_summary": str((output_dir / "calibration" / "calibrated_l2_summary.json").resolve()),
             "uncertainty_model": str((output_dir / "calibration" / "uncertainty_model.json").resolve()),

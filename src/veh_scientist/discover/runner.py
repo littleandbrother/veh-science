@@ -15,6 +15,7 @@ from veh_scientist.discover.hypotheses import build_tr_hypothesis_ladder
 from veh_scientist.discover.l1_chain import ChainReplayParams, run_l1_chain_replay
 from veh_scientist.discover.l2_beam import BeamReplayParams, run_l2_beam_replay
 from veh_scientist.discover.l3_toolchain import run_l3_validation_suite
+from veh_scientist.discover.mechanisms import build_mechanism_portfolio
 from veh_scientist.discover.program import build_initial_program
 from veh_scientist.discover.report import write_report_bundle
 from veh_scientist.discover.smoke import run_regression_smoke
@@ -60,6 +61,9 @@ class DiscoveryRunner:
             "tool_runs": [asdict(run) for run in program.tool_runs],
             "warnings": list(program.warnings),
             "l3_validation": program.l3_validation,
+            "calibration_summary": program.calibration_summary,
+            "appendix_summary": program.appendix_summary,
+            "mechanism_portfolio": program.mechanism_portfolio,
             "smoke_summary": program.smoke_summary,
         }
 
@@ -143,16 +147,41 @@ class DiscoveryRunner:
         derivation_dir = ensure_dir(root / "04_derivations")
         derivation_outputs = execute_tr_derivations(derivation_dir, self.task)
         program.derivations = derivation_outputs["cards"]
+        program.appendix_summary = derivation_outputs.get("appendix_summary", {})
         self._register_artifact(program, "Derivation report", "report", derivation_dir / "derivation_report.md", "Symbolic and numerical derivation ladder for TR replay.", "derivations")
         self._register_artifact(program, "Replay equations", "equation", derivation_dir / "equations.tex", "LaTeX equations emitted from the derivation stage.", "derivations")
+        self._register_artifact(program, "Appendix package", "report", derivation_dir / "appendix_package.md", "Appendix-grade derivation package with traces, limits, and solver cross-checks.", "derivations")
+        self._register_artifact(program, "Appendix bundle", "equation", derivation_dir / "appendix_bundle.tex", "LaTeX appendix bundle ready for manuscript integration.", "derivations")
+        self._register_artifact(program, "Derivation traces", "dataset", derivation_dir / "derivation_traces.json", "Symbol-to-symbol traces for every key derivation card.", "derivations")
+        self._register_artifact(program, "Symbol table", "dataset", derivation_dir / "symbol_table.json", "Normalized symbol table for appendix assembly.", "derivations")
         program.tool_runs.append(
             ToolRunRecord(
                 tool="sympy",
                 purpose="symbolic derivation execution",
                 status="passed",
-                outputs={"n_cards": len(derivation_outputs["cards"])},
-                artifact_paths=(str(derivation_dir / "derivation_report.md"), str(derivation_dir / "equations.tex"), str(derivation_dir / "derivation_checks.json")),
+                outputs={
+                    "n_cards": len(derivation_outputs["cards"]),
+                    "n_trace_groups": program.appendix_summary.get("n_trace_groups", 0),
+                    "solver_cross_checks": program.appendix_summary.get("n_solver_cross_checks", 0),
+                },
+                artifact_paths=(
+                    str(derivation_dir / "derivation_report.md"),
+                    str(derivation_dir / "equations.tex"),
+                    str(derivation_dir / "appendix_package.md"),
+                    str(derivation_dir / "appendix_bundle.tex"),
+                    str(derivation_dir / "derivation_checks.json"),
+                    str(derivation_dir / "derivation_traces.json"),
+                    str(derivation_dir / "symbol_table.json"),
+                ),
             )
+        )
+        program.summary_metrics.update(
+            {
+                "appendix_cards": int(program.appendix_summary.get("n_cards", len(derivation_outputs["cards"]))),
+                "appendix_symbol_traces": int(program.appendix_summary.get("n_trace_groups", 0)),
+                "appendix_limit_cases": int(program.appendix_summary.get("n_limit_cases", 0)),
+                "appendix_solver_cross_checks": int(program.appendix_summary.get("n_solver_cross_checks", 0)),
+            }
         )
         program.planned_steps = update_step_status(program.planned_steps, "derivations", "completed")
 
@@ -205,18 +234,41 @@ class DiscoveryRunner:
         )
         l3_dir = ensure_dir(root / "06_verification" / "l3_toolchain")
         l3_summary = run_l3_validation_suite(l3_dir, self.task, l1_summary=l1_summary, l2_summary=l2_summary)
-        program.l3_validation = {
-            "request_manifest": l3_summary["request_manifest"],
-            "consensus_alignment": l3_summary["consensus_alignment"],
-            "tool_results": l3_summary["tool_results"],
-        }
+        program.l3_validation = l3_summary
+        program.calibration_summary = l3_summary.get("calibration_summary", {})
+        calibration_summary = program.calibration_summary
+        if calibration_summary.get("source") == "paper-anchor-fallback":
+            program.warnings.append(
+                "L2–L3 calibration used paper-anchor fallback because no passed MATLAB/COMSOL result was available."
+            )
         self._register_artifact(program, "L3 request manifest", "dataset", Path(l3_summary["artifacts"]["request_manifest"]), "Shared request manifest for MATLAB and COMSOL L3 validation.", "verification")
         self._register_artifact(program, "L3 consensus alignment", "dataset", Path(l3_summary["artifacts"]["consensus_alignment"]), "Anchor-aware consensus alignment between raw L2 candidates and paper/L3 targets.", "verification")
         self._register_artifact(program, "L3 summary", "dataset", Path(l3_summary["artifacts"]["summary"]), "MATLAB/COMSOL toolchain results and consensus alignment.", "verification")
+        self._register_artifact(program, "Calibration summary", "dataset", Path(l3_summary["artifacts"]["calibration_summary"]), "Closed-loop L2↔L3 calibration metrics, maps, and provenance.", "verification")
+        self._register_artifact(program, "Calibrated L2 summary", "dataset", Path(l3_summary["artifacts"]["calibrated_l2_summary"]), "Calibrated L2 summary after applying L3-derived frequency and stopband corrections.", "verification")
+        self._register_artifact(program, "Frequency calibration", "figure", Path(l3_summary["artifacts"]["frequency_calibration"]), "Raw-versus-calibrated L2 frequency map against L3 anchors.", "verification")
+        self._register_artifact(program, "Stopband calibration", "figure", Path(l3_summary["artifacts"]["stopband_calibration"]), "Raw-versus-calibrated stopband alignment against L3 anchors.", "verification")
         for run in l3_summary["tool_runs"]:
             program.tool_runs.append(run)
+        program.tool_runs.append(
+            ToolRunRecord(
+                tool="python",
+                purpose="L2↔L3 calibration loop",
+                status="passed",
+                outputs=calibration_summary.get("errors", {}),
+                artifact_paths=(
+                    l3_summary["artifacts"]["calibration_summary"],
+                    l3_summary["artifacts"]["calibrated_l2_summary"],
+                    l3_summary["artifacts"]["frequency_calibration"],
+                    l3_summary["artifacts"]["stopband_calibration"],
+                ),
+                notes=f"source={calibration_summary.get('source', '')}, confidence={calibration_summary.get('confidence', 0.0):.3f}",
+            )
+        )
         matlab_result = l3_summary["tool_results"].get("matlab", {})
         comsol_result = l3_summary["tool_results"].get("comsol", {})
+        l2_for_gaps = calibration_summary.get("calibrated_l2_summary", l2_summary)
+        cal_errors = calibration_summary.get("errors", {})
         program.summary_metrics.update(
             {
                 "l2_stopbands": len(l2_summary.get("stopbands_nd", [])),
@@ -224,11 +276,18 @@ class DiscoveryRunner:
                 "l3_consensus_pairs": len(l3_summary.get("consensus_alignment", [])),
                 "matlab_status": matlab_result.get("status", "not-run") if "matlab" in self.task.allowed_tools else "not-requested",
                 "comsol_status": comsol_result.get("status", "not-run") if "comsol" in self.task.allowed_tools else "not-requested",
+                "calibration_source": calibration_summary.get("source", ""),
+                "calibration_confidence": round(float(calibration_summary.get("confidence", 0.0) or 0.0), 4),
+                "calibration_pre_rmse_hz": round(float(cal_errors.get("pre_rmse_hz", 0.0) or 0.0), 3),
+                "calibration_post_rmse_hz": round(float(cal_errors.get("post_rmse_hz", 0.0) or 0.0), 3),
+                "calibration_pre_stopband_mae_hz": round(float(cal_errors.get("pre_stopband_mae_hz", 0.0) or 0.0), 3),
+                "calibration_post_stopband_mae_hz": round(float(cal_errors.get("post_stopband_mae_hz", 0.0) or 0.0), 3),
+                "calibration_rmse_improved": float(cal_errors.get("post_rmse_hz", 0.0) or 0.0) <= float(cal_errors.get("pre_rmse_hz", 0.0) or 0.0),
             }
         )
         program.planned_steps = update_step_status(program.planned_steps, "verification", "completed")
 
-        # Gap ranking.
+        # Gap ranking + mechanism portfolio.
         program.planned_steps = update_step_status(program.planned_steps, "gap_design", "running")
         program.stage = "gap_design"
         gap_dir = ensure_dir(root / "07_gap_design")
@@ -237,10 +296,10 @@ class DiscoveryRunner:
             band_of_interest = tuple(self.task.engineering_task.frequency_target.band_of_interest)
         raw_gap_candidates = build_gap_candidates(
             l1_summary,
-            l2_summary,
+            l2_for_gaps,
             band_of_interest=band_of_interest,
             anchors=self.task.l3_anchors,
-            l3_summary=program.l3_validation,
+            l3_summary=l3_summary,
         )
         ranked_gaps = rank_gap_candidates(raw_gap_candidates)
         program.gap_candidates = ranked_gaps
@@ -252,14 +311,23 @@ class DiscoveryRunner:
             "",
         ]
         for gap in ranked_gaps:
-            freq_note = f", raw={gap.raw_frequency_hz:.3f} Hz, anchored={gap.anchored_frequency_hz:.3f} Hz" if gap.raw_frequency_hz is not None and gap.anchored_frequency_hz is not None else ""
+            freq_note = ""
+            if gap.raw_frequency_hz is not None or gap.anchored_frequency_hz is not None:
+                freq_note = f", raw={gap.raw_frequency_hz:.3f} Hz, anchored={gap.anchored_frequency_hz:.3f} Hz"
+            cal_note = ""
+            if gap.calibrated_frequency_hz is not None:
+                cal_note = f", calibrated={gap.calibrated_frequency_hz:.3f} Hz, cal_conf={gap.calibration_confidence:.3f}"
             anchor_note = f", anchor={gap.matched_anchor_label}, anchor_score={gap.anchor_score:.3f}" if gap.matched_anchor_label else ""
             design_rules_lines.append(
-                f"- Gap {gap.band_index}: score={gap.overall_score:.3f}, Ω∈[{gap.omega_min:.4f}, {gap.omega_max:.4f}], TR={list(gap.tr_frequencies)}{freq_note}{anchor_note}"
+                f"- Gap {gap.band_index}: score={gap.overall_score:.3f}, Ω∈[{gap.omega_min:.4f}, {gap.omega_max:.4f}], TR={list(gap.tr_frequencies)}{freq_note}{cal_note}{anchor_note}"
             )
         write_text(gap_dir / "design_rules.md", "\n".join(design_rules_lines))
+        portfolio = build_mechanism_portfolio(gap_dir, self.task, ranked_gaps, calibration_summary=calibration_summary)
+        program.mechanism_portfolio = portfolio
         self._register_artifact(program, "Gap ranking", "dataset", gap_dir / "gap_ranking.json", "Ranked gap candidates combining L1, L2, and L3-anchor evidence.", "gap_design")
         self._register_artifact(program, "Design rules", "report", gap_dir / "design_rules.md", "Compact design rules distilled from replay evidence.", "gap_design")
+        self._register_artifact(program, "Mechanism portfolio", "dataset", gap_dir / "mechanism_portfolio.json", "Portfolio-level mechanism comparison and recommended expansion path.", "gap_design")
+        self._register_artifact(program, "Mechanism roadmap", "report", gap_dir / "mechanism_combo_roadmap.md", "Mechanism-combination roadmap for the next research layer.", "gap_design")
         program.tool_runs.append(
             ToolRunRecord(
                 tool="python",
@@ -267,6 +335,15 @@ class DiscoveryRunner:
                 status="passed",
                 outputs={"n_ranked_gaps": len(ranked_gaps)},
                 artifact_paths=(str(gap_dir / "gap_ranking.json"), str(gap_dir / "design_rules.md")),
+            )
+        )
+        program.tool_runs.append(
+            ToolRunRecord(
+                tool="python",
+                purpose="mechanism portfolio assembly",
+                status="passed",
+                outputs={"primary": portfolio.get("recommended_path", {}).get("primary", "")},
+                artifact_paths=(str(gap_dir / "mechanism_portfolio.json"), str(gap_dir / "mechanism_combo_roadmap.md")),
             )
         )
         if ranked_gaps:
@@ -279,15 +356,32 @@ class DiscoveryRunner:
                     "best_gap_anchor": best_gap.matched_anchor_label,
                     "best_gap_raw_hz": round(best_gap.raw_frequency_hz, 3) if best_gap.raw_frequency_hz is not None else None,
                     "best_gap_anchored_hz": round(best_gap.anchored_frequency_hz, 3) if best_gap.anchored_frequency_hz is not None else None,
+                    "best_gap_calibrated_hz": round(best_gap.calibrated_frequency_hz, 3) if best_gap.calibrated_frequency_hz is not None else None,
+                    "best_gap_calibration_confidence": round(best_gap.calibration_confidence, 4),
                 }
             )
+        recommended = portfolio.get("recommended_path", {})
+        program.summary_metrics.update(
+            {
+                "mechanism_primary": recommended.get("primary", ""),
+                "mechanism_secondary": ", ".join(recommended.get("secondary", [])),
+            }
+        )
         program.planned_steps = update_step_status(program.planned_steps, "gap_design", "completed")
 
         # Reporting.
         program.planned_steps = update_step_status(program.planned_steps, "reporting", "running")
         program.stage = "reporting"
         report_dir = ensure_dir(root / "08_reporting")
-        execute_tr_derivations(report_dir / "derivations_validated", self.task, l1_summary=l1_summary, l2_summary=l2_summary)
+        validated_derivations = execute_tr_derivations(
+            report_dir / "derivations_validated",
+            self.task,
+            l1_summary=l1_summary,
+            l2_summary=l2_for_gaps,
+        )
+        program.appendix_summary = validated_derivations.get("appendix_summary", program.appendix_summary)
+        self._register_artifact(program, "Validated appendix package", "report", report_dir / "derivations_validated" / "appendix_package.md", "Validated appendix package cross-checked against executable L1/L2 results.", "reporting")
+        self._register_artifact(program, "Validated appendix bundle", "equation", report_dir / "derivations_validated" / "appendix_bundle.tex", "Validated LaTeX appendix bundle for manuscript assembly.", "reporting")
         program.evidence = draft_evidence_records(program.claim_graph, program.derivations, program.gap_candidates, artifacts=program.artifacts, tool_runs=program.tool_runs)
         write_json(report_dir / "evidence_matrix.json", program.evidence)
         bundle = write_report_bundle(report_dir, self.task, program)

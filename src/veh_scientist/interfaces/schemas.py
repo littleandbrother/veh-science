@@ -286,6 +286,12 @@ class GapCandidate:
     center_frequency_hz: float | None = None
     raw_frequency_hz: float | None = None
     anchored_frequency_hz: float | None = None
+    calibrated_frequency_hz: float | None = None
+    raw_stopband_hz: tuple[float, float] | None = None
+    calibrated_stopband_hz: tuple[float, float] | None = None
+    stopband_error_hz: float | None = None
+    calibration_confidence: float = 0.0
+    calibration_source: str = ""
     matched_anchor_label: str = ""
     suppression_margin: float = 0.0
     localization_score: float = 0.0
@@ -331,6 +337,9 @@ class DiscoveryProgramState:
     warnings: list[str] = field(default_factory=list)
     summary_metrics: dict[str, Any] = field(default_factory=dict)
     l3_validation: dict[str, Any] = field(default_factory=dict)
+    calibration_summary: dict[str, Any] = field(default_factory=dict)
+    appendix_summary: dict[str, Any] = field(default_factory=dict)
+    mechanism_portfolio: dict[str, Any] = field(default_factory=dict)
     smoke_summary: dict[str, Any] = field(default_factory=dict)
     output_dir: str = ""
     current_focus: str | None = None

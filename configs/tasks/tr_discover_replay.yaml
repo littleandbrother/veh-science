@@ -38,12 +38,17 @@ milestones:
   - l1_chain_replay
   - gap_ranking
   - beam_transfer
+  - l2_l3_calibration
+  - mechanism_portfolio
   - discovery_report
 target_outcomes:
   - claim_graph.json
   - hypothesis_ladder.md
   - derivation_report.md
   - gap_ranking.json
+  - calibration_summary.json
+  - appendix_package.md
+  - mechanism_portfolio.json
   - discovery_report.md
 allowed_tools: [python, matlab, comsol, sympy]
 required_artifacts:
@@ -51,6 +56,10 @@ required_artifacts:
   - derivation_report.md
   - chain_parameter_atlas.json
   - gap_ranking.json
+  - calibration_summary.json
+  - calibrated_l2_summary.json
+  - appendix_package.md
+  - mechanism_portfolio.json
   - evidence_matrix.json
 replay_notes:
   - Start from finite-chain TR existence before adding piezoelectric coupling.

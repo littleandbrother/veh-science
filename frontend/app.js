@@ -1,66 +1,90 @@
-const statusBox = document.getElementById('status');
 const taskCardInput = document.getElementById('task-card');
 const outputDirInput = document.getElementById('output-dir');
 const taskMeta = document.getElementById('task-meta');
+const statusEl = document.getElementById('status');
+
+const runButton = document.getElementById('run-btn');
+const refreshButton = document.getElementById('refresh-btn');
+const rebuildReportButton = document.getElementById('rebuild-report-btn');
+const smokeButton = document.getElementById('smoke-btn');
+const runsButton = document.getElementById('runs-btn');
 
 let currentTask = null;
 let currentProgram = null;
 
-const runBtn = document.getElementById('run-btn');
-const refreshBtn = document.getElementById('refresh-btn');
-const rebuildReportBtn = document.getElementById('rebuild-report-btn');
-const smokeBtn = document.getElementById('smoke-btn');
-const runsBtn = document.getElementById('runs-btn');
+runButton.addEventListener('click', runReplay);
+refreshButton.addEventListener('click', loadLatest);
+rebuildReportButton.addEventListener('click', rebuildReport);
+smokeButton.addEventListener('click', runSmoke);
+runsButton.addEventListener('click', loadRuns);
 
-runBtn.addEventListener('click', runReplay);
-refreshBtn.addEventListener('click', loadLatest);
-rebuildReportBtn.addEventListener('click', rebuildReport);
-smokeBtn.addEventListener('click', runSmoke);
-runsBtn.addEventListener('click', loadRuns);
+function setStatus(message) {
+  statusEl.textContent = message;
+}
+
+function artifactUrl(path) {
+  return `/artifact?path=${encodeURIComponent(path)}`;
+}
+
+function postJson(url, payload) {
+  return fetch(url, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload),
+  }).then(resp => resp.json().then(data => ({...data, _status: resp.status, _okHttp: resp.ok})));
+}
+
+function findArtifact(program, basenameOrLabel) {
+  if (!program?.artifacts?.length) return null;
+  return program.artifacts.find(artifact => artifact.label === basenameOrLabel || artifact.path.endsWith(`/${basenameOrLabel}`) || artifact.path.endsWith(`\\${basenameOrLabel}`)) || null;
+}
+
+function appendArtifactLink(container, program, basenameOrLabel, text) {
+  const artifact = findArtifact(program, basenameOrLabel);
+  if (!artifact) return;
+  const link = document.createElement('a');
+  link.href = artifactUrl(artifact.path);
+  link.target = '_blank';
+  link.textContent = text || artifact.label;
+  container.appendChild(link);
+}
 
 async function init() {
   try {
     const response = await fetch('/api/defaults');
     const data = await response.json();
-    if (data.ok) {
-      currentTask = data.task;
-      taskCardInput.value = data.default_task_card;
-      outputDirInput.value = data.default_output_dir;
-      renderTaskMeta(currentTask);
-      renderAnchors(currentTask.l3_anchors || []);
+    if (!data.ok) {
+      setStatus(`Failed to load defaults:\n${data.error}`);
+      return;
     }
+    currentTask = data.task;
+    taskCardInput.value = data.default_task_card;
+    outputDirInput.value = data.default_output_dir;
+    renderTaskMeta(data.task);
     await loadRuns();
-    setStatus('Dashboard ready.');
+    setStatus('Defaults loaded.');
   } catch (error) {
-    setStatus(`Dashboard init failed:\n${error}`);
+    setStatus(`Initialization failed:\n${error}`);
   }
-}
-
-function setStatus(message) {
-  statusBox.textContent = message;
 }
 
 function renderTaskMeta(task) {
-  if (!task) {
-    taskMeta.textContent = '';
-    return;
+  taskMeta.innerHTML = '';
+  const lines = [
+    `Task ID: ${task.task_id}`,
+    `Mode: ${task.discovery_mode}`,
+    `Mechanism: ${task.mechanism_focus}`,
+    `Allowed tools: ${(task.allowed_tools || []).join(', ')}`,
+  ];
+  if (task.research_question) {
+    lines.push(`Question: ${task.research_question}`);
   }
-  const anchors = (task.l3_anchors || []).map(anchor => `${anchor.label}@${anchor.frequency_hz}Hz`).join(', ');
-  taskMeta.innerHTML = `
-    <div><strong>task_id:</strong> ${task.task_id}</div>
-    <div><strong>mode:</strong> ${task.discovery_mode}</div>
-    <div><strong>allowed tools:</strong> ${(task.allowed_tools || []).join(', ')}</div>
-    <div><strong>L3 anchors:</strong> ${anchors || 'none'}</div>
-  `;
-}
-
-async function postJson(url, payload) {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(payload),
+  lines.forEach(text => {
+    const div = document.createElement('div');
+    div.textContent = text;
+    taskMeta.appendChild(div);
   });
-  return response.json();
+  renderAnchors(task.l3_anchors || []);
 }
 
 async function runReplay() {
@@ -73,10 +97,11 @@ async function runReplay() {
     setStatus(`Replay failed:\n${data.error}`);
     return;
   }
+  currentTask = currentTask || data.program;
   currentProgram = data.program;
   renderProgram(data.program, data.summary);
+  setStatus(`Replay completed. task_id=${data.program.task_id}, stage=${data.program.stage}`);
   await loadRuns();
-  setStatus(`Replay complete. Output: ${data.program.output_dir}`);
 }
 
 async function loadLatest() {
@@ -160,7 +185,7 @@ function renderRuns(runs) {
   }
   const table = document.createElement('table');
   table.className = 'table';
-  table.innerHTML = '<thead><tr><th>Task ID</th><th>Stage</th><th>Updated</th><th>Best gap anchor</th><th>Smoke</th><th>Action</th></tr></thead>';
+  table.innerHTML = '<thead><tr><th>Task ID</th><th>Stage</th><th>Updated</th><th>Best gap anchor</th><th>Best calibrated Hz</th><th>Calibration source</th><th>Smoke</th><th>Action</th></tr></thead>';
   const body = document.createElement('tbody');
   runs.forEach(run => {
     const row = document.createElement('tr');
@@ -179,6 +204,8 @@ function renderRuns(runs) {
       <td>${run.stage}</td>
       <td>${run.updated_at || ''}</td>
       <td>${run.best_gap_anchor || ''}</td>
+      <td>${run.best_gap_calibrated_hz ?? ''}</td>
+      <td>${run.calibration_source || ''}</td>
       <td>${run.smoke_pass === undefined ? '' : run.smoke_pass}</td>
       <td></td>
     `;
@@ -196,6 +223,9 @@ function renderProgram(program, summary) {
   renderSteps(program.planned_steps || []);
   renderClaims(program.claim_graph || []);
   renderHypotheses(program.hypotheses || []);
+  renderCalibration(program.calibration_summary || {}, program);
+  renderAppendix(program.appendix_summary || {}, program);
+  renderMechanisms(program.mechanism_portfolio || {}, program);
   renderGaps(program.gap_candidates || []);
   renderToolRuns(program.tool_runs || []);
   renderArtifacts(program.artifacts || []);
@@ -293,6 +323,123 @@ function renderHypotheses(hypotheses) {
   });
 }
 
+function renderCalibration(calibrationSummary, program) {
+  const root = document.getElementById('calibration');
+  root.innerHTML = '';
+  if (!calibrationSummary || !Object.keys(calibrationSummary).length) {
+    root.textContent = 'No calibration summary loaded.';
+    return;
+  }
+  const errors = calibrationSummary.errors || {};
+  const list = document.createElement('ul');
+  const items = [
+    ['Source', calibrationSummary.source],
+    ['Confidence', Number(calibrationSummary.confidence || 0).toFixed(4)],
+    ['Pre RMSE (Hz)', Number(errors.pre_rmse_hz || 0).toFixed(3)],
+    ['Post RMSE (Hz)', Number(errors.post_rmse_hz || 0).toFixed(3)],
+    ['Pre stopband MAE (Hz)', Number(errors.pre_stopband_mae_hz || 0).toFixed(3)],
+    ['Post stopband MAE (Hz)', Number(errors.post_stopband_mae_hz || 0).toFixed(3)],
+    ['Iterations', calibrationSummary.iterations ?? ''],
+  ];
+  items.forEach(([label, value]) => {
+    const li = document.createElement('li');
+    li.textContent = `${label}: ${value}`;
+    list.appendChild(li);
+  });
+  root.appendChild(list);
+
+  const links = document.createElement('div');
+  links.className = 'link-row';
+  appendArtifactLink(links, program, 'Calibration summary', 'calibration_summary.json');
+  if (links.childNodes.length) links.appendChild(document.createTextNode(' '));
+  appendArtifactLink(links, program, 'Calibrated L2 summary', 'calibrated_l2_summary.json');
+  if (links.childNodes.length) links.appendChild(document.createTextNode(' '));
+  appendArtifactLink(links, program, 'Frequency calibration', 'frequency_calibration.png');
+  if (links.childNodes.length) links.appendChild(document.createTextNode(' '));
+  appendArtifactLink(links, program, 'Stopband calibration', 'stopband_calibration.png');
+  root.appendChild(links);
+}
+
+function renderAppendix(appendixSummary, program) {
+  const root = document.getElementById('appendix');
+  root.innerHTML = '';
+  if (!appendixSummary || !Object.keys(appendixSummary).length) {
+    root.textContent = 'No appendix summary loaded.';
+    return;
+  }
+  const list = document.createElement('ul');
+  const entries = [
+    ['Cards', appendixSummary.n_cards ?? 0],
+    ['Symbols', appendixSummary.n_symbols ?? 0],
+    ['All checks pass', appendixSummary.all_checks_pass],
+    ['Trace groups', appendixSummary.n_trace_groups ?? 0],
+    ['Limit cases', appendixSummary.n_limit_cases ?? 0],
+    ['Solver cross-checks', appendixSummary.n_solver_cross_checks ?? 0],
+  ];
+  entries.forEach(([label, value]) => {
+    const li = document.createElement('li');
+    li.textContent = `${label}: ${value}`;
+    list.appendChild(li);
+  });
+  root.appendChild(list);
+  const links = document.createElement('div');
+  links.className = 'link-row';
+  appendArtifactLink(links, program, 'Appendix package', 'appendix_package.md');
+  if (links.childNodes.length) links.appendChild(document.createTextNode(' '));
+  appendArtifactLink(links, program, 'Appendix bundle', 'appendix_bundle.tex');
+  if (links.childNodes.length) links.appendChild(document.createTextNode(' '));
+  appendArtifactLink(links, program, 'Derivation traces', 'derivation_traces.json');
+  if (links.childNodes.length) links.appendChild(document.createTextNode(' '));
+  appendArtifactLink(links, program, 'Symbol table', 'symbol_table.json');
+  root.appendChild(links);
+}
+
+function renderMechanisms(portfolio, program) {
+  const root = document.getElementById('mechanisms');
+  root.innerHTML = '';
+  if (!portfolio || !portfolio.entries?.length) {
+    root.textContent = 'No mechanism portfolio loaded.';
+    return;
+  }
+  const rec = portfolio.recommended_path || {};
+  const intro = document.createElement('p');
+  intro.innerHTML = `<strong>Primary:</strong> ${rec.primary || ''} &nbsp; <strong>Secondary:</strong> ${(rec.secondary || []).join(', ') || '—'}`;
+  root.appendChild(intro);
+  if (rec.rationale?.length) {
+    const rationale = document.createElement('ul');
+    rec.rationale.forEach(line => {
+      const li = document.createElement('li');
+      li.textContent = line;
+      rationale.appendChild(li);
+    });
+    root.appendChild(rationale);
+  }
+  const table = document.createElement('table');
+  table.className = 'table';
+  table.innerHTML = '<thead><tr><th>Mechanism</th><th>Maturity</th><th>Fit</th><th>Calibration confidence</th><th>Recommended</th><th>Next experiments</th></tr></thead>';
+  const body = document.createElement('tbody');
+  portfolio.entries.forEach(entry => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>${entry.display_name} (${entry.mechanism_key})</td>
+      <td>${entry.maturity}</td>
+      <td>${entry.fit_score}</td>
+      <td>${entry.calibration_confidence}</td>
+      <td>${entry.recommended}</td>
+      <td>${(entry.next_experiments || []).join('; ')}</td>
+    `;
+    body.appendChild(row);
+  });
+  table.appendChild(body);
+  root.appendChild(table);
+  const links = document.createElement('div');
+  links.className = 'link-row';
+  appendArtifactLink(links, program, 'Mechanism portfolio', 'mechanism_portfolio.json');
+  if (links.childNodes.length) links.appendChild(document.createTextNode(' '));
+  appendArtifactLink(links, program, 'Mechanism roadmap', 'mechanism_combo_roadmap.md');
+  root.appendChild(links);
+}
+
 function renderGaps(gaps) {
   const root = document.getElementById('gaps');
   root.innerHTML = '';
@@ -302,7 +449,7 @@ function renderGaps(gaps) {
   }
   const table = document.createElement('table');
   table.className = 'table';
-  table.innerHTML = '<thead><tr><th>Gap</th><th>Ω min</th><th>Ω max</th><th>TR</th><th>Raw Hz</th><th>Anchored Hz</th><th>Anchor</th><th>Score</th></tr></thead>';
+  table.innerHTML = '<thead><tr><th>Gap</th><th>Ω min</th><th>Ω max</th><th>TR</th><th>Raw Hz</th><th>Anchored Hz</th><th>Calibrated Hz</th><th>Stopband err (Hz)</th><th>Cal conf</th><th>Anchor</th><th>Score</th></tr></thead>';
   const body = document.createElement('tbody');
   gaps.forEach(g => {
     const row = document.createElement('tr');
@@ -313,6 +460,9 @@ function renderGaps(gaps) {
       <td>${(g.tr_frequencies || []).join(', ')}</td>
       <td>${g.raw_frequency_hz === null || g.raw_frequency_hz === undefined ? '' : Number(g.raw_frequency_hz).toFixed(3)}</td>
       <td>${g.anchored_frequency_hz === null || g.anchored_frequency_hz === undefined ? '' : Number(g.anchored_frequency_hz).toFixed(3)}</td>
+      <td>${g.calibrated_frequency_hz === null || g.calibrated_frequency_hz === undefined ? '' : Number(g.calibrated_frequency_hz).toFixed(3)}</td>
+      <td>${g.stopband_error_hz === null || g.stopband_error_hz === undefined ? '' : Number(g.stopband_error_hz).toFixed(3)}</td>
+      <td>${Number(g.calibration_confidence || 0).toFixed(3)}</td>
       <td>${g.matched_anchor_label || ''}</td>
       <td>${Number(g.overall_score || 0).toFixed(4)}</td>
     `;
@@ -335,7 +485,7 @@ function renderToolRuns(toolRuns) {
   const body = document.createElement('tbody');
   toolRuns.forEach(run => {
     const row = document.createElement('tr');
-    const artifactLinks = (run.artifact_paths || []).map(path => `<a href="/artifact?path=${encodeURIComponent(path)}" target="_blank">artifact</a>`).join(' ');
+    const artifactLinks = (run.artifact_paths || []).map(path => `<a href="${artifactUrl(path)}" target="_blank">artifact</a>`).join(' ');
     row.innerHTML = `
       <td>${run.tool}</td>
       <td>${run.purpose}</td>
@@ -375,7 +525,7 @@ function renderArtifacts(artifacts) {
   artifacts.forEach(artifact => {
     const li = document.createElement('li');
     const link = document.createElement('a');
-    link.href = `/artifact?path=${encodeURIComponent(artifact.path)}`;
+    link.href = artifactUrl(artifact.path);
     link.target = '_blank';
     link.textContent = `${artifact.label} (${artifact.generated_by})`;
     li.appendChild(link);

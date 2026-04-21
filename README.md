@@ -2,19 +2,21 @@
 
 Mechanism-grounded autonomous vibration energy harvesting (VEH) scientist.
 
-This repository is building toward an agentic research stack for topological/truncation-resonance-guided piezoelectric VEH design. The current implementation is centered on an executable **discovery replay** for the truncation-resonance paper path: corpus ingestion, claim graphing, derivation artifacts, L1 chain replay, L2 beam replay, L3 MATLAB/COMSOL call-chain manifests, anchor-aware gap ranking, report generation, smoke checks, and a local dashboard.
+This repository is building toward an agentic research stack for topological/truncation-resonance-guided piezoelectric VEH design. The current implementation is centered on an executable **discovery replay** for the truncation-resonance paper path: corpus ingestion, claim graphing, appendix-grade derivation artifacts, L1 chain replay, L2 beam replay, L2–L3 calibration, L3 MATLAB/COMSOL call-chain manifests, anchor-aware gap ranking, mechanism-portfolio planning, report generation, smoke checks, and a local dashboard.
 
 ## Current Scope
 
 - L1 mechanism verification for periodic / diatomic-chain TR screening logic.
 - L2 beam oracle for dispersion, stopbands, finite-beam candidate TRs, and harvesting proxies.
-- L3 validation call chain for MATLAB and COMSOL:
-  - shared request manifests,
+- L3 validation and calibration loop for MATLAB and COMSOL:
+  - strict request/result protocol,
   - MATLAB `.m` driver generation,
   - COMSOL `mph` bridge invocation,
-  - structured result JSONs,
+  - structured frequency/stopband calibration pairs,
+  - affine retuning of L2 frequencies and stopbands against L3 anchors,
   - failure is recorded explicitly when external runtimes are unavailable.
-- Discovery replay runtime, report generator, regression smoke, and local dashboard.
+- Appendix-grade derivation package with symbol traces, limit cases, solver cross-checks, and LaTeX appendix bundle generation.
+- Discovery replay runtime, mechanism portfolio layer, report generator, regression smoke, and local dashboard.
 
 ## Repository Layout
 
@@ -123,7 +125,7 @@ The dashboard now supports:
 - load latest run,
 - report rebuild,
 - smoke rerun,
-- rendering of L3 anchors, gap ranking, tool runs, smoke status, and artifacts.
+- rendering of L3 anchors, calibration metrics, appendix summary, mechanism portfolio, gap ranking, tool runs, smoke status, and artifacts.
 
 ## Outputs
 

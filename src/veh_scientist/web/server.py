@@ -18,7 +18,7 @@ from veh_scientist.taskcard import parse_discover_task_card
 
 
 class DashboardHandler(BaseHTTPRequestHandler):
-    server_version = "VEHScienceDashboard/0.2"
+    server_version = "VEHScienceDashboard/0.3"
 
     def _json(self, payload: Any, status: int = HTTPStatus.OK) -> None:
         body = json.dumps(to_jsonable(payload), ensure_ascii=False).encode("utf-8")
@@ -51,6 +51,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
             task_id = task.task_id
         return Path(output_dir) / task_id / "program_state.json"
 
+    def _load_program_from_query(self, parsed_query: dict[str, list[str]]):
+        path = self._resolve_program_path(parsed_query)
+        if not path.exists():
+            return None, path
+        return load_program_state(path), path
+
     def _run_list(self, output_dir: str | Path) -> list[dict[str, Any]]:
         root = Path(output_dir)
         if not root.exists():
@@ -66,7 +72,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         "updated_at": program.updated_at,
                         "output_dir": str(Path(program.output_dir).resolve()) if program.output_dir else str(candidate.parent.resolve()),
                         "best_gap_anchor": program.summary_metrics.get("best_gap_anchor"),
+                        "best_gap_calibrated_hz": program.summary_metrics.get("best_gap_calibrated_hz"),
                         "smoke_pass": program.summary_metrics.get("smoke_pass"),
+                        "calibration_source": program.summary_metrics.get("calibration_source"),
                     }
                 )
             except Exception:
@@ -109,13 +117,18 @@ class DashboardHandler(BaseHTTPRequestHandler):
             if not path.exists():
                 return self._json({"ok": False, "error": f"Program state not found: {path}"}, status=HTTPStatus.NOT_FOUND)
             return self._serve_static(path)
-        if parsed.path == "/api/smoke":
+        if parsed.path in {"/api/smoke", "/api/calibration", "/api/appendix", "/api/mechanisms"}:
             params = parse_qs(parsed.query)
-            path = self._resolve_program_path(params)
-            if not path.exists():
+            program, path = self._load_program_from_query(params)
+            if program is None:
                 return self._json({"ok": False, "error": f"Program state not found: {path}"}, status=HTTPStatus.NOT_FOUND)
-            program = load_program_state(path)
-            return self._json({"ok": True, "smoke_summary": program.smoke_summary})
+            if parsed.path == "/api/smoke":
+                return self._json({"ok": True, "smoke_summary": program.smoke_summary})
+            if parsed.path == "/api/calibration":
+                return self._json({"ok": True, "calibration_summary": program.calibration_summary})
+            if parsed.path == "/api/appendix":
+                return self._json({"ok": True, "appendix_summary": program.appendix_summary})
+            return self._json({"ok": True, "mechanism_portfolio": program.mechanism_portfolio})
         if parsed.path == "/artifact":
             params = parse_qs(parsed.query)
             requested = params.get("path", [""])[0]

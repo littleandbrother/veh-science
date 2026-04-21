@@ -10,6 +10,7 @@ from .hypotheses import build_tr_hypothesis_ladder
 from .l1_chain import ChainReplayParams, run_l1_chain_replay
 from .l2_beam import BeamReplayParams, run_l2_beam_replay
 from .l3_toolchain import run_l3_validation_suite
+from .mechanisms import build_mechanism_portfolio
 from .program import build_initial_program
 from .replay_tr import build_tr_replay_steps
 from .report import write_report_bundle
@@ -27,6 +28,7 @@ __all__ = [
     "build_corpus_manifest",
     "build_gap_candidates",
     "build_initial_program",
+    "build_mechanism_portfolio",
     "build_tr_derivation_cards",
     "build_tr_hypothesis_ladder",
     "build_tr_replay_steps",

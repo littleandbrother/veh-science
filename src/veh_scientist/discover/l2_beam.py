@@ -179,15 +179,20 @@ def beam_gap_candidates(params: BeamReplayParams, omega_nd_grid: np.ndarray) -> 
         width = max(gap_high - gap_low, 1.0e-9)
         center = 0.5 * (gap_low + gap_high)
         edge_distance = min(omega_tr - gap_low, gap_high - omega_tr)
+        gap_min_hz = float(gap_low * params.omega_b / (2.0 * np.pi))
+        gap_max_hz = float(gap_high * params.omega_b / (2.0 * np.pi))
+        freq_hz = float(omega_tr * params.omega_b / (2.0 * np.pi))
         candidates.append(
             {
                 "band_index": band_index,
                 "omega_min": float(gap_low),
                 "omega_max": float(gap_high),
                 "omega_tr": omega_tr,
-                "frequency_hz": float(omega_tr * params.omega_b / (2.0 * np.pi)),
+                "frequency_hz": freq_hz,
+                "raw_frequency_hz": freq_hz,
                 "gap_center_hz": float(center * params.omega_b / (2.0 * np.pi)),
                 "gap_width_nd": float(width),
+                "raw_stopband_hz": [gap_min_hz, gap_max_hz],
                 "smin": float(smins_arr[idx]),
                 "suppression_margin": attenuation_proxy(evals) * max(0.0, min(1.0, 2.0 * edge_distance / width)),
                 "localization_score": loc,
@@ -280,19 +285,20 @@ def run_l2_beam_replay(output_dir: str | Path, params: BeamReplayParams | None =
 
     write_csv(output_dir / "beam_band_points.csv", band_points, fieldnames=["omega_nd", "k", "frequency_hz"])
     write_json(output_dir / "beam_gap_candidates.json", candidates)
+    stopbands_hz = [
+        {
+            "frequency_min_hz": float(lo * params.omega_b / (2.0 * np.pi)),
+            "frequency_max_hz": float(hi * params.omega_b / (2.0 * np.pi)),
+        }
+        for lo, hi in gap_intervals
+    ]
     write_json(
         output_dir / "beam_summary.json",
         {
             "params": params.__dict__,
             "omega_b": params.omega_b,
             "stopbands_nd": [{"omega_min": lo, "omega_max": hi} for lo, hi in gap_intervals],
-            "stopbands_hz": [
-                {
-                    "frequency_min_hz": float(lo * params.omega_b / (2.0 * np.pi)),
-                    "frequency_max_hz": float(hi * params.omega_b / (2.0 * np.pi)),
-                }
-                for lo, hi in gap_intervals
-            ],
+            "stopbands_hz": stopbands_hz,
             "candidates": candidates,
             "figures": figures,
         },
@@ -301,6 +307,7 @@ def run_l2_beam_replay(output_dir: str | Path, params: BeamReplayParams | None =
         "params": params.__dict__,
         "omega_b": params.omega_b,
         "stopbands_nd": gap_intervals,
+        "stopbands_hz": stopbands_hz,
         "candidates": candidates,
         "figures": figures,
     }

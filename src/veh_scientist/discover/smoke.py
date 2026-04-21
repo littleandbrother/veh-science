@@ -55,17 +55,76 @@ def run_regression_smoke(
             )
         )
 
+    for required in (
+        "calibration_summary.json",
+        "calibrated_l2_summary.json",
+        "appendix_package.md",
+        "appendix_bundle.tex",
+        "derivation_traces.json",
+        "symbol_table.json",
+        "mechanism_portfolio.json",
+        "mechanism_combo_roadmap.md",
+    ):
+        checks.append(
+            _check(
+                f"artifact::{required}",
+                _artifact_exists(program, required),
+                f"Expected replay artifact `{required}` should exist.",
+            )
+        )
+
     l1_eta = float(program.summary_metrics.get("l1_eta", 0.0) or 0.0)
     l1_pef = float(program.summary_metrics.get("l1_pef", 0.0) or 0.0)
     l2_stopbands = int(program.summary_metrics.get("l2_stopbands", 0) or 0)
     best_gap_score = float(program.summary_metrics.get("best_gap_score", 0.0) or 0.0)
+    appendix_cards = int(program.summary_metrics.get("appendix_cards", 0) or 0)
+    calibration_post_rmse = float(program.summary_metrics.get("calibration_post_rmse_hz", 0.0) or 0.0)
+    calibration_pre_rmse = float(program.summary_metrics.get("calibration_pre_rmse_hz", 0.0) or 0.0)
     checks.extend(
         [
             _check("l1_eta_floor", l1_eta > 0.5, f"Observed l1_eta={l1_eta:.4f}; expected strong localization."),
             _check("l1_pef_floor", l1_pef > 5.0, f"Observed l1_pef={l1_pef:.4f}; expected meaningful TR gain."),
-            _check("l2_stopbands_exist", l2_stopbands >= 1, f"Observed l2_stopbands={l2_stopbands}.") ,
+            _check("l2_stopbands_exist", l2_stopbands >= 1, f"Observed l2_stopbands={l2_stopbands}."),
             _check("gap_score_available", best_gap_score > 0.0, f"Observed best_gap_score={best_gap_score:.4f}."),
+            _check("appendix_cards_available", appendix_cards >= 6, f"Observed appendix_cards={appendix_cards}."),
+            _check(
+                "calibration_rmse_improved",
+                calibration_post_rmse <= calibration_pre_rmse,
+                f"Observed calibration pre/post RMSE = {calibration_pre_rmse:.3f} / {calibration_post_rmse:.3f} Hz.",
+            ),
         ]
+    )
+
+    appendix = program.appendix_summary or {}
+    checks.append(
+        _check(
+            "appendix_traces_present",
+            int(appendix.get("n_trace_groups", 0) or 0) >= 6,
+            f"Observed trace groups={appendix.get('n_trace_groups', 0)}.",
+        )
+    )
+    checks.append(
+        _check(
+            "appendix_solver_cross_checks_present",
+            int(appendix.get("n_solver_cross_checks", 0) or 0) >= 4,
+            f"Observed solver cross-checks={appendix.get('n_solver_cross_checks', 0)}.",
+        )
+    )
+
+    calibration = program.calibration_summary or {}
+    checks.append(
+        _check(
+            "calibration_summary_present",
+            bool(calibration),
+            "Calibration summary should be present after the L2↔L3 calibration loop.",
+        )
+    )
+    checks.append(
+        _check(
+            "mechanism_portfolio_present",
+            bool(program.mechanism_portfolio and program.mechanism_portfolio.get("entries")),
+            "Mechanism portfolio should be assembled after gap ranking.",
+        )
     )
 
     repo = repo_root()

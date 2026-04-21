@@ -1,150 +1,194 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>VEH Science Discovery Replay</title>
-  <link rel="stylesheet" href="/frontend/styles.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VEH Scientist - Cockpit</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
+    <link rel="stylesheet" href="/frontend/styles.css">
 </head>
 <body>
-  <main class="layout">
-    <header>
-      <h1>VEH Science — Discovery Replay</h1>
-      <p>Executable replay for truncation-resonance discovery, including PDF ingestion, claim graph, appendix-grade derivations, L1/L2 solvers, uncertainty-aware L2–L3 calibration, multi-mechanism solver libraries, negative-result memory, publication packaging, and human-in-the-loop discussion.</p>
+    <header class="top-nav">
+        <div class="nav-left">
+            <span class="material-symbols-outlined logo-icon">science</span>
+            <h1>VEH Scientist - Cockpit</h1>
+        </div>
+        <div class="nav-center controls">
+            <div class="input-group">
+                <label for="task-card">Task</label>
+                <input type="text" id="task-card" value="configs/tasks/tr_discover_replay.yaml">
+            </div>
+            <div class="input-group">
+                <label for="output-dir">Output</label>
+                <input type="text" id="output-dir" value="results/discovery">
+            </div>
+            <button id="run-btn" class="primary-btn"><span class="material-symbols-outlined">play_arrow</span> Run</button>
+            <button id="refresh-btn" class="secondary-btn"><span class="material-symbols-outlined">refresh</span> Load</button>
+        </div>
+        <div class="nav-right">
+             <div class="status-indicator">
+                <span class="dot running"></span>
+                <span id="status-text">Ready</span>
+            </div>
+             <button id="theme-toggle" class="icon-btn" title="Toggle Theme">
+                <span class="material-symbols-outlined">dark_mode</span>
+            </button>
+             <button id="menu-btn" class="icon-btn" title="Menu">
+                <span class="material-symbols-outlined">menu</span>
+            </button>
+        </div>
     </header>
 
-    <section class="card controls">
-      <div class="grid2">
-        <label>
-          <span>Task card</span>
-          <input id="task-card" type="text" value="configs/tasks/tr_discover_replay.yaml">
-        </label>
-        <label>
-          <span>Output root</span>
-          <input id="output-dir" type="text" value="results/discovery">
-        </label>
-      </div>
-      <div class="actions wrap">
-        <button id="run-btn">Run replay</button>
-        <button id="refresh-btn">Load latest</button>
-        <button id="rebuild-report-btn">Rebuild report</button>
-        <button id="smoke-btn">Run smoke</button>
-        <button id="runs-btn">Refresh runs</button>
-      </div>
-      <div id="task-meta" class="meta"></div>
-      <pre id="status" class="status">Ready.</pre>
-    </section>
+    <div class="secondary-toolbar">
+         <div class="task-info">
+             <span class="task-badge" id="task-id-badge">Task: Loading...</span>
+             <span class="round-badge" id="current-round-badge">Round 1</span>
+             <span class="completion-status completed"><span class="dot"></span><span id="stage-text">Completed</span></span>
+         </div>
+         <div class="toolbar-actions">
+              <div class="budget-display">Discussion Budget: <span id="budget-val">0 / 6</span></div>
+              <div class="best-so-far-display"><span class="material-symbols-outlined">emoji_events</span> Best So Far: <span id="best-so-far-val">None</span></div>
+              <button class="text-btn" id="smoke-btn">Run Smoke</button>
+              <button class="text-btn" id="rebuild-report-btn">Rebuild Report</button>
+              <button class="text-btn" id="runs-btn">Ref runs</button>
+         </div>
+    </div>
 
-    <section class="card">
-      <h2>Recent runs</h2>
-      <div id="runs"></div>
-    </section>
+    <main class="cockpit-layout">
+        <!-- Main Content Area -->
+        <div class="main-column">
+            
+            <!-- Multi-Agent Discussion -->
+            <section class="panel discussion-panel">
+                <div class="panel-header">
+                    <h2><span class="material-symbols-outlined">forum</span> Multi-Agent Discussion</h2>
+                    <div class="panel-actions">
+                        <span style="font-size: 0.8rem; color: var(--text-secondary); margin-right: 8px;">Role Agents</span>
+                        <div style="display: inline-block; background: var(--primary-color); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem;">Multi-LLM Scientists</div>
+                    </div>
+                </div>
+                <div class="panel-content discussion-container" id="discussion-container">
+                    <!-- Messages will be injected here -->
+                    <div class="empty-state">No discussion loaded.</div>
+                </div>
+                 <div class="human-input-area">
+                    <div class="input-row">
+                         <input type="text" id="note-author" placeholder="Author" value="human">
+                         <input type="text" id="note-topic" placeholder="Topic" value="note">
+                    </div>
+                    <div class="textarea-wrapper">
+                        <textarea id="note-content" placeholder="Add a decision, correction, criticism, or experiment request..."></textarea>
+                        <button id="note-btn" class="send-btn"><span class="material-symbols-outlined">send</span></button>
+                    </div>
+                </div>
+            </section>
 
-    <section class="card">
-      <h2>Summary</h2>
-      <div id="summary"></div>
-    </section>
+            <!-- Verification & Results -->
+            <section class="panel verif-panel">
+                <div class="panel-header">
+                    <h2><span class="material-symbols-outlined">fact_check</span> Verification</h2>
+                    <div class="tabs">
+                        <button class="tab-btn active" data-target="l1-tab">L1 Python</button>
+                        <button class="tab-btn" data-target="l2-tab">L2 MATLAB</button>
+                        <button class="tab-btn" data-target="l3-tab">L3 COMSOL</button>
+                    </div>
+                </div>
+                <div class="panel-content verification-content">
+                    <div class="tab-content active" id="l1-tab">
+                         <div class="result-summary box-content">
+                              <h3><span class="material-symbols-outlined">analytics</span> Result Summary</h3>
+                              <div class="metrics-grid" id="l1-metrics">
+                                   <!-- L1 metrics -->
+                              </div>
+                              <pre class="console-output" id="l1-console"></pre>
+                         </div>
+                    </div>
+                    <div class="tab-content" id="l2-tab">
+                        <div class="result-summary box-content">
+                              <h3><span class="material-symbols-outlined">analytics</span> Result Summary</h3>
+                              <div class="metrics-grid" id="l2-metrics">
+                                   <!-- L2 metrics -->
+                              </div>
+                              <pre class="console-output" id="l2-console"></pre>
+                         </div>
+                    </div>
+                    <div class="tab-content" id="l3-tab">
+                         <div class="result-summary box-content">
+                              <h3><span class="material-symbols-outlined">analytics</span> Result Summary</h3>
+                              <div class="metrics-grid" id="l3-metrics">
+                                   <!-- L3 metrics -->
+                              </div>
+                              <pre class="console-output" id="l3-console"></pre>
+                         </div>
+                    </div>
+                </div>
+            </section>
 
-    <section class="card">
-      <h2>Stages</h2>
-      <div id="steps" class="step-grid"></div>
-    </section>
-
-    <section class="card">
-      <h2>L3 anchors</h2>
-      <div id="anchors"></div>
-    </section>
-
-    <section class="card">
-      <h2>L2–L3 calibration</h2>
-      <div id="calibration"></div>
-    </section>
-
-    <section class="card">
-      <h2>Appendix package</h2>
-      <div id="appendix"></div>
-    </section>
-
-    <section class="card">
-      <h2>Mechanism portfolio</h2>
-      <div id="mechanisms"></div>
-    </section>
-
-    <section class="card">
-      <h2>Solver library and code generation</h2>
-      <div id="library"></div>
-    </section>
-
-    <section class="card">
-      <h2>Gap ranking</h2>
-      <div id="gaps"></div>
-    </section>
-
-    <section class="card">
-      <h2>Negative-result memory</h2>
-      <div id="memory"></div>
-    </section>
-
-    <section class="card">
-      <h2>Publication bundle</h2>
-      <div id="publication"></div>
-    </section>
-
-    <section class="card">
-      <h2>Discussion and human notes</h2>
-      <div class="discussion-form">
-        <div class="grid3">
-          <label>
-            <span>Author</span>
-            <input id="note-author" type="text" value="human">
-          </label>
-          <label>
-            <span>Topic</span>
-            <input id="note-topic" type="text" value="note">
-          </label>
-          <label>
-            <span>References (comma-separated)</span>
-            <input id="note-refs" type="text" value="">
-          </label>
+            <!-- Mechanism Portfolio & Library -->
+            <section class="panel mechanism-panel">
+                <div class="panel-header">
+                     <h2><span class="material-symbols-outlined">account_tree</span> Mechanism Portfolio & Library</h2>
+                </div>
+                <div class="panel-content">
+                     <div id="mechanisms-content" class="table-container"></div>
+                     <div class="library-content mt-4" id="library-content"></div>
+                </div>
+            </section>
         </div>
-        <label>
-          <span>Human note</span>
-          <textarea id="note-content" rows="4" placeholder="Add a decision, correction, criticism, or experiment request."></textarea>
-        </label>
-        <div class="actions wrap">
-          <button id="note-btn">Add human note</button>
-          <button id="discussion-refresh-btn">Refresh discussion</button>
+
+        <!-- Right Sidebar for Knowledge & Memory -->
+        <div class="sidebar-column">
+            <section class="panel knowledge-panel">
+                <div class="panel-header">
+                    <h2><span class="material-symbols-outlined">psychology</span> Memory & Knowledge</h2>
+                </div>
+                <div class="panel-content sidebar-scroll">
+                    
+                    <div class="section-block">
+                         <h3 class="block-title"><span class="material-symbols-outlined">timeline</span> ROUND TIMELINE</h3>
+                         <div class="timeline" id="round-timeline">
+                             <!-- Timeline events -->
+                         </div>
+                    </div>
+
+                    <div class="section-block mt-4">
+                         <h3 class="block-title"><span class="material-symbols-outlined">menu_book</span> PERSISTENT KNOWLEDGE</h3>
+                         <div class="knowledge-cards" id="knowledge-cards">
+                              <!-- Knowledge cards -->
+                         </div>
+                    </div>
+
+                    <div class="section-block mt-4">
+                         <h3 class="block-title"><span class="material-symbols-outlined">category</span> REUSABLE DESIGN MOTIFS</h3>
+                         <div class="motifs-container" id="design-motifs">
+                              <!-- Motifs -->
+                         </div>
+                    </div>
+
+                    <div class="section-block mt-4">
+                         <h3 class="block-title"><span class="material-symbols-outlined">link</span> ARTIFACTS & CLAIMS</h3>
+                         <div class="artifacts-list" id="artifacts-list"></div>
+                         <div class="claims-list" id="claims-list"></div>
+                    </div>
+
+                     <div class="section-block mt-4">
+                         <h3 class="block-title"><span class="material-symbols-outlined">speed</span> SMOKE TEST STATUS</h3>
+                         <div class="smoke-status" id="smoke-status"></div>
+                    </div>
+                </div>
+            </section>
         </div>
-      </div>
-      <div id="discussion"></div>
-    </section>
+    </main>
 
-    <section class="card">
-      <h2>Tool runs</h2>
-      <div id="tool-runs"></div>
-    </section>
-
-    <section class="card">
-      <h2>Regression smoke</h2>
-      <div id="smoke"></div>
-    </section>
-
-    <section class="card">
-      <h2>Claims</h2>
-      <ul id="claims"></ul>
-    </section>
-
-    <section class="card">
-      <h2>Hypotheses</h2>
-      <ul id="hypotheses"></ul>
-    </section>
-
-    <section class="card">
-      <h2>Artifacts</h2>
-      <ul id="artifacts"></ul>
-    </section>
-  </main>
-
-  <script src="/frontend/app.js"></script>
+    <!-- Modal for Runs -->
+    <div id="runs-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2>Recent Runs</h2>
+            <div id="runs-table-container" class="table-container"></div>
+        </div>
+    </div>
+    <script src="/frontend/app.js"></script>
 </body>
 </html>

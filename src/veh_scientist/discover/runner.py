@@ -280,6 +280,8 @@ class DiscoveryRunner:
         self._register_artifact(program, "L3 request manifest", "dataset", Path(l3_summary["artifacts"]["request_manifest"]), "Shared request manifest for MATLAB and COMSOL L3 validation.", "verification")
         self._register_artifact(program, "L3 consensus alignment", "dataset", Path(l3_summary["artifacts"]["consensus_alignment"]), "Anchor-aware consensus alignment between raw L2 candidates and L3/paper targets.", "verification")
         self._register_artifact(program, "L3 summary", "dataset", Path(l3_summary["artifacts"]["summary"]), "MATLAB/COMSOL toolchain results and consensus alignment.", "verification")
+        self._register_artifact(program, "MATLAB L3 result", "dataset", Path(l3_summary["artifacts"]["matlab_result"]), "Raw MATLAB LiveLink protocol output for the L3 validation run.", "verification")
+        self._register_artifact(program, "COMSOL L3 result", "dataset", Path(l3_summary["artifacts"]["comsol_result"]), "Raw COMSOL mph protocol output for the L3 validation run.", "verification")
         self._register_artifact(program, "Calibration summary", "dataset", Path(l3_summary["artifacts"]["calibration_summary"]), "Closed-loop L2↔L3 calibration metrics, maps, and provenance.", "verification")
         self._register_artifact(program, "Calibrated L2 summary", "dataset", Path(l3_summary["artifacts"]["calibrated_l2_summary"]), "Calibrated L2 summary after applying L3-derived frequency and stopband corrections.", "verification")
         self._register_artifact(program, "Uncertainty model", "dataset", Path(l3_summary["artifacts"]["uncertainty_model"]), "Residual-model parameters used for candidate-level uncertainty calibration.", "verification")
@@ -287,6 +289,8 @@ class DiscoveryRunner:
         self._register_artifact(program, "Frequency calibration", "figure", Path(l3_summary["artifacts"]["frequency_calibration"]), "Raw-versus-calibrated L2 frequency map against L3 anchors.", "verification")
         self._register_artifact(program, "Stopband calibration", "figure", Path(l3_summary["artifacts"]["stopband_calibration"]), "Raw-versus-calibrated stopband alignment against L3 anchors.", "verification")
         self._register_artifact(program, "Uncertainty calibration", "figure", Path(l3_summary["artifacts"]["uncertainty_calibration"]), "Candidate-level uncertainty and extrapolation profile across the calibrated shortlist.", "verification")
+        for tool_name, tool_result in l3_summary["tool_results"].items():
+            self._register_l3_curve_artifacts(program, tool_name, tool_result)
         for run in l3_summary["tool_runs"]:
             program.tool_runs.append(run)
         cal_errors = calibration_summary.get("errors", {})
@@ -698,6 +702,38 @@ class DiscoveryRunner:
                 generated_by=generated_by,
             )
         )
+
+    def _register_l3_curve_artifacts(
+        self,
+        program: DiscoveryProgramState,
+        tool_name: str,
+        tool_result: dict[str, object],
+    ) -> None:
+        artifacts = tool_result.get("curve_artifacts", {})
+        if not isinstance(artifacts, dict):
+            return
+        labels = {
+            "transmission_curve": (f"{tool_name.upper()} transmission curve", "dataset", "Frequency sweep with transmission-like response extracted from the live L3 backend."),
+            "power_curve": (f"{tool_name.upper()} power curve", "dataset", "Frequency sweep with terminal voltage and harvested power extracted from the live L3 backend."),
+            "mode_shape": (f"{tool_name.upper()} mode shape summary", "dataset", "Anchor-aligned mode-shape summary emitted by the live L3 backend."),
+            "stopband_summary": (f"{tool_name.upper()} stopband summary", "dataset", "Detected live stopband intervals and extraction thresholds for the L3 backend."),
+        }
+        for key, (label, artifact_type, description) in labels.items():
+            value = artifacts.get(key)
+            if isinstance(value, str) and value:
+                self._register_artifact(program, label, artifact_type, Path(value), description, "verification")
+        profiles = artifacts.get("mode_shape_profiles", {})
+        if isinstance(profiles, dict):
+            for profile_label, profile_path in profiles.items():
+                if isinstance(profile_path, str) and profile_path:
+                    self._register_artifact(
+                        program,
+                        f"{tool_name.upper()} mode profile {profile_label}",
+                        "dataset",
+                        Path(profile_path),
+                        "Binned spatial mode-shape profile extracted from the live L3 backend.",
+                        "verification",
+                    )
 
     def _write_program(self, program: DiscoveryProgramState, path: str | Path) -> None:
         write_json(path, program)

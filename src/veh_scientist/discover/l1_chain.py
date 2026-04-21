@@ -6,6 +6,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from veh_scientist.matplotlib_compat import configure_headless_matplotlib
+
+configure_headless_matplotlib()
+
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.linalg import eigh

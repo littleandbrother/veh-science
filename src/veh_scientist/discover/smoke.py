@@ -9,6 +9,7 @@ from veh_scientist.discover.utils import repo_root, write_json, write_text
 from veh_scientist.interfaces import DiscoverTaskCard, DiscoveryProgramState
 
 
+
 def _artifact_exists(program: DiscoveryProgramState, basename: str) -> bool:
     for artifact in program.artifacts:
         if Path(artifact.path).name == basename and Path(artifact.path).exists():
@@ -20,6 +21,7 @@ def _artifact_exists(program: DiscoveryProgramState, basename: str) -> bool:
     return False
 
 
+
 def _check(name: str, passed: bool, details: str, severity: str = "required") -> dict[str, Any]:
     return {
         "name": name,
@@ -27,6 +29,7 @@ def _check(name: str, passed: bool, details: str, severity: str = "required") ->
         "details": details,
         "severity": severity,
     }
+
 
 
 def run_regression_smoke(
@@ -58,12 +61,20 @@ def run_regression_smoke(
     for required in (
         "calibration_summary.json",
         "calibrated_l2_summary.json",
+        "uncertainty_model.json",
+        "candidate_uncertainty.csv",
         "appendix_package.md",
         "appendix_bundle.tex",
         "derivation_traces.json",
         "symbol_table.json",
         "mechanism_portfolio.json",
-        "mechanism_combo_roadmap.md",
+        "mechanism_solver_library.json",
+        "mechanism_solver_comparison.csv",
+        "negative_result_memory.json",
+        "publication_bundle.json",
+        "reviewer_artifact_manifest.json",
+        "discussion_bundle.json",
+        "multi_llm_prompt_pack.json",
     ):
         checks.append(
             _check(
@@ -80,6 +91,10 @@ def run_regression_smoke(
     appendix_cards = int(program.summary_metrics.get("appendix_cards", 0) or 0)
     calibration_post_rmse = float(program.summary_metrics.get("calibration_post_rmse_hz", 0.0) or 0.0)
     calibration_pre_rmse = float(program.summary_metrics.get("calibration_pre_rmse_hz", 0.0) or 0.0)
+    solver_library_entries = int(program.summary_metrics.get("solver_library_entries", 0) or 0)
+    negative_memory_records = int(program.summary_metrics.get("negative_memory_records", 0) or 0)
+    publication_figures = int(program.summary_metrics.get("publication_main_figures", 0) or 0)
+    discussion_roles = int(program.summary_metrics.get("discussion_generated_roles", 0) or 0)
     checks.extend(
         [
             _check("l1_eta_floor", l1_eta > 0.5, f"Observed l1_eta={l1_eta:.4f}; expected strong localization."),
@@ -92,6 +107,10 @@ def run_regression_smoke(
                 calibration_post_rmse <= calibration_pre_rmse,
                 f"Observed calibration pre/post RMSE = {calibration_pre_rmse:.3f} / {calibration_post_rmse:.3f} Hz.",
             ),
+            _check("solver_library_entries", solver_library_entries >= 5, f"Observed solver_library_entries={solver_library_entries}."),
+            _check("negative_memory_records", negative_memory_records >= 1, f"Observed negative_memory_records={negative_memory_records}."),
+            _check("publication_figures_available", publication_figures >= 3, f"Observed publication_main_figures={publication_figures}."),
+            _check("discussion_roles_available", discussion_roles >= 5, f"Observed discussion_generated_roles={discussion_roles}."),
         ]
     )
 
@@ -112,6 +131,8 @@ def run_regression_smoke(
     )
 
     calibration = program.calibration_summary or {}
+    candidate_uncertainty = calibration.get("candidate_uncertainty", [])
+    residual_model = calibration.get("residual_model", {})
     checks.append(
         _check(
             "calibration_summary_present",
@@ -121,9 +142,51 @@ def run_regression_smoke(
     )
     checks.append(
         _check(
+            "candidate_uncertainty_present",
+            len(candidate_uncertainty) >= 1,
+            f"Observed candidate uncertainty rows={len(candidate_uncertainty)}.",
+        )
+    )
+    checks.append(
+        _check(
+            "residual_model_present",
+            bool(residual_model) and float(residual_model.get("base_sigma_hz", 0.0) or 0.0) >= 0.0,
+            "Residual uncertainty model should be present and numerically defined.",
+        )
+    )
+    checks.append(
+        _check(
             "mechanism_portfolio_present",
             bool(program.mechanism_portfolio and program.mechanism_portfolio.get("entries")),
             "Mechanism portfolio should be assembled after gap ranking.",
+        )
+    )
+    checks.append(
+        _check(
+            "solver_library_present",
+            bool(program.solver_library and program.solver_library.get("entries")),
+            "Solver library should be assembled after the mechanism stage.",
+        )
+    )
+    checks.append(
+        _check(
+            "negative_memory_present",
+            bool(program.negative_memory and program.negative_memory.get("records") is not None),
+            "Negative-result memory should be present after the memory stage.",
+        )
+    )
+    checks.append(
+        _check(
+            "publication_bundle_present",
+            bool(program.publication_bundle),
+            "Publication bundle should be present after the publication stage.",
+        )
+    )
+    checks.append(
+        _check(
+            "discussion_bundle_present",
+            bool(program.discussion_bundle),
+            "Discussion bundle should be present after the discussion stage.",
         )
     )
 

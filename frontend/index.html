@@ -10,7 +10,7 @@
   <main class="layout">
     <header>
       <h1>VEH Science — Discovery Replay</h1>
-      <p>Executable replay for truncation-resonance discovery, including PDF ingestion, claim graph, appendix-grade derivations, L1/L2 solvers, L2–L3 calibration, real MATLAB/COMSOL call-chain manifests, mechanism portfolio, report generation, and regression smoke.</p>
+      <p>Executable replay for truncation-resonance discovery, including PDF ingestion, claim graph, appendix-grade derivations, L1/L2 solvers, uncertainty-aware L2–L3 calibration, multi-mechanism solver libraries, negative-result memory, publication packaging, and human-in-the-loop discussion.</p>
     </header>
 
     <section class="card controls">
@@ -71,8 +71,52 @@
     </section>
 
     <section class="card">
+      <h2>Solver library and code generation</h2>
+      <div id="library"></div>
+    </section>
+
+    <section class="card">
       <h2>Gap ranking</h2>
       <div id="gaps"></div>
+    </section>
+
+    <section class="card">
+      <h2>Negative-result memory</h2>
+      <div id="memory"></div>
+    </section>
+
+    <section class="card">
+      <h2>Publication bundle</h2>
+      <div id="publication"></div>
+    </section>
+
+    <section class="card">
+      <h2>Discussion and human notes</h2>
+      <div class="discussion-form">
+        <div class="grid3">
+          <label>
+            <span>Author</span>
+            <input id="note-author" type="text" value="human">
+          </label>
+          <label>
+            <span>Topic</span>
+            <input id="note-topic" type="text" value="note">
+          </label>
+          <label>
+            <span>References (comma-separated)</span>
+            <input id="note-refs" type="text" value="">
+          </label>
+        </div>
+        <label>
+          <span>Human note</span>
+          <textarea id="note-content" rows="4" placeholder="Add a decision, correction, criticism, or experiment request."></textarea>
+        </label>
+        <div class="actions wrap">
+          <button id="note-btn">Add human note</button>
+          <button id="discussion-refresh-btn">Refresh discussion</button>
+        </div>
+      </div>
+      <div id="discussion"></div>
     </section>
 
     <section class="card">

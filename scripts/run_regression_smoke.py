@@ -21,7 +21,7 @@ def main() -> int:
     task = parse_discover_task_card(task_path)
     task_id = args.task_id or task.task_id
     program = load_program_state(f"{args.output_dir}/{task_id}/program_state.json")
-    smoke = run_regression_smoke(task, program, f"{args.output_dir}/{task_id}/09_smoke")
+    smoke = run_regression_smoke(task, program, f"{args.output_dir}/{task_id}/13_smoke")
     print(json.dumps(to_jsonable(smoke), indent=2, ensure_ascii=False))
     return 0
 

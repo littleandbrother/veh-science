@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import sqrt
+from math import exp, sqrt
 from pathlib import Path
 from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-from veh_scientist.discover.utils import ensure_dir, write_json
+from veh_scientist.discover.utils import ensure_dir, write_csv, write_json
 from veh_scientist.interfaces import DiscoverTaskCard
 
 L3_PROTOCOL_VERSION = "l3-protocol-1.0"
@@ -46,6 +46,56 @@ class WidthCalibration:
         if width is None:
             return None
         return float(max(0.0, self.scale * float(width)))
+
+
+@dataclass(frozen=True)
+class ResidualCalibrationModel:
+    """Residual/error model wrapped around the affine frequency calibration."""
+
+    residual_bias_hz: float = 0.0
+    base_sigma_hz: float = 0.0
+    leave_one_out_rmse_hz: float = 0.0
+    anchor_min_hz: float | None = None
+    anchor_max_hz: float | None = None
+    anchor_span_hz: float = 1.0
+    penalty_slope_hz_per_span: float = 0.0
+    support: int = 0
+    confidence_level: float = 0.95
+
+    def normalized_distance(self, raw_frequency_hz: float | None) -> float:
+        if raw_frequency_hz is None or self.anchor_min_hz is None or self.anchor_max_hz is None:
+            return 0.0
+        value = float(raw_frequency_hz)
+        if self.anchor_min_hz <= value <= self.anchor_max_hz:
+            return 0.0
+        distance = self.anchor_min_hz - value if value < self.anchor_min_hz else value - self.anchor_max_hz
+        return float(max(0.0, distance / max(self.anchor_span_hz, 1.0)))
+
+    def extrapolation_penalty(self, raw_frequency_hz: float | None) -> float:
+        return float(self.penalty_slope_hz_per_span * self.normalized_distance(raw_frequency_hz))
+
+    def sigma(self, raw_frequency_hz: float | None) -> float:
+        penalty = self.extrapolation_penalty(raw_frequency_hz)
+        return float(max(1.0e-9, sqrt(max(self.base_sigma_hz, 0.0) ** 2 + penalty**2)))
+
+    def confidence_interval(self, mapped_frequency_hz: float | None, raw_frequency_hz: float | None) -> tuple[float, float] | None:
+        if mapped_frequency_hz is None:
+            return None
+        # z≈1.96 for 95% CI. We keep it fixed because the replay stack currently
+        # does not require exact Student-t corrections for low support counts.
+        z_value = 1.96
+        sigma = self.sigma(raw_frequency_hz)
+        return (float(mapped_frequency_hz - z_value * sigma), float(mapped_frequency_hz + z_value * sigma))
+
+    def confidence_score(self, raw_frequency_hz: float | None) -> float:
+        scale = max(0.2 * self.anchor_span_hz, 250.0)
+        sigma = self.sigma(raw_frequency_hz)
+        return float(max(0.1, min(1.0, exp(-sigma / scale))))
+
+
+
+def _clamp01(value: float) -> float:
+    return float(max(0.0, min(1.0, value)))
 
 
 
@@ -340,10 +390,93 @@ def _stopband_error(interval_a: tuple[float, float] | None, interval_b: tuple[fl
 
 
 
+def _normalized_range_distance(value: float, anchors: list[float]) -> float:
+    if not anchors:
+        return 0.0
+    low = min(anchors)
+    high = max(anchors)
+    span = max(high - low, 1.0)
+    if low <= value <= high:
+        return 0.0
+    if value < low:
+        return float((low - value) / span)
+    return float((value - high) / span)
+
+
+
+def _fit_residual_model(
+    frequency_pairs: list[dict[str, Any]],
+    frequency_map: AffineCalibrationMap,
+) -> tuple[ResidualCalibrationModel, list[dict[str, Any]]]:
+    raw_values = [float(pair["raw_frequency_hz"]) for pair in frequency_pairs if pair.get("raw_frequency_hz") is not None]
+    target_values = [float(pair["l3_frequency_hz"]) for pair in frequency_pairs if pair.get("l3_frequency_hz") is not None]
+    if not raw_values or not target_values or len(raw_values) != len(target_values):
+        return ResidualCalibrationModel(), []
+
+    mapped_values = [float(frequency_map.apply(value)) for value in raw_values]
+    residuals = [mapped - target for mapped, target in zip(mapped_values, target_values)]
+    absolute_residuals = [abs(value) for value in residuals]
+    base_sigma = max(float(np.std(np.array(residuals, dtype=float), ddof=0)), _rmse(list(zip(mapped_values, target_values))), 1.0e-9)
+    bias = float(np.mean(np.array(residuals, dtype=float))) if residuals else 0.0
+
+    loo_records: list[dict[str, Any]] = []
+    penalty_slope = 0.0
+    if len(raw_values) >= 2:
+        distances: list[float] = []
+        errors: list[float] = []
+        for idx, (raw_frequency, target_frequency) in enumerate(zip(raw_values, target_values)):
+            other_raws = raw_values[:idx] + raw_values[idx + 1 :]
+            other_targets = target_values[:idx] + target_values[idx + 1 :]
+            loo_map = _fit_affine(other_raws, other_targets)
+            predicted = float(loo_map.apply(raw_frequency))
+            residual = float(predicted - target_frequency)
+            distance = _normalized_range_distance(raw_frequency, other_raws)
+            loo_records.append(
+                {
+                    "index": idx,
+                    "raw_frequency_hz": raw_frequency,
+                    "target_frequency_hz": target_frequency,
+                    "predicted_frequency_hz": predicted,
+                    "loo_residual_hz": residual,
+                    "normalized_distance": distance,
+                }
+            )
+            distances.append(distance)
+            errors.append(abs(residual))
+        if len(distances) >= 2 and np.max(np.abs(np.array(distances, dtype=float) - np.mean(distances))) > 1.0e-9:
+            slope, intercept = np.polyfit(np.array(distances, dtype=float), np.array(errors, dtype=float), deg=1)
+            if np.isfinite(slope) and slope > 0.0:
+                penalty_slope = float(slope)
+            if np.isfinite(intercept) and intercept > base_sigma:
+                base_sigma = float(intercept)
+        elif errors:
+            penalty_slope = float(np.max(errors))
+    loo_rmse = _rmse([(record["predicted_frequency_hz"], record["target_frequency_hz"]) for record in loo_records])
+    base_sigma = max(base_sigma, 0.5 * loo_rmse)
+
+    anchor_min = min(raw_values) if raw_values else None
+    anchor_max = max(raw_values) if raw_values else None
+    anchor_span = max((anchor_max or 0.0) - (anchor_min or 0.0), 1.0)
+    model = ResidualCalibrationModel(
+        residual_bias_hz=bias,
+        base_sigma_hz=base_sigma,
+        leave_one_out_rmse_hz=loo_rmse,
+        anchor_min_hz=anchor_min,
+        anchor_max_hz=anchor_max,
+        anchor_span_hz=anchor_span,
+        penalty_slope_hz_per_span=float(max(0.0, penalty_slope)),
+        support=len(raw_values),
+        confidence_level=0.95,
+    )
+    return model, loo_records
+
+
+
 def _build_calibrated_l2_summary(
     l2_summary: dict[str, Any],
     frequency_map: AffineCalibrationMap,
     width_map: WidthCalibration,
+    residual_model: ResidualCalibrationModel,
     frequency_pairs: list[dict[str, Any]],
     stopband_pairs: list[dict[str, Any]],
     confidence: float,
@@ -353,12 +486,6 @@ def _build_calibrated_l2_summary(
     pair_by_band = {int(pair["band_index"]): pair for pair in frequency_pairs}
     stop_by_band = {int(pair["band_index"]): pair for pair in stopband_pairs}
     rows = _candidate_rows(l2_summary)
-    raw_anchor_values = [float(pair["raw_frequency_hz"]) for pair in frequency_pairs if pair.get("raw_frequency_hz") is not None]
-    raw_anchor_min = min(raw_anchor_values) if raw_anchor_values else None
-    raw_anchor_max = max(raw_anchor_values) if raw_anchor_values else None
-    anchor_span = None
-    if raw_anchor_min is not None and raw_anchor_max is not None:
-        anchor_span = max(raw_anchor_max - raw_anchor_min, 1.0)
     calibrated_rows: list[dict[str, Any]] = []
     for row in rows:
         band_index = int(row.get("band_index", 0))
@@ -372,16 +499,12 @@ def _build_calibrated_l2_summary(
         matched_stop = stop_by_band.get(band_index)
         target_stop = None if matched_stop is None else tuple(float(v) for v in matched_stop["l3_stopband_hz"])
         stopband_error_hz = _stopband_error(calibrated_stopband_hz, target_stop)
-        interpolation_confidence = 1.0
-        if raw_anchor_min is not None and raw_anchor_max is not None and anchor_span is not None:
-            if raw_anchor_min <= raw_frequency_hz <= raw_anchor_max:
-                interpolation_confidence = 1.0
-            elif raw_frequency_hz < raw_anchor_min:
-                interpolation_confidence = max(0.2, 1.0 - (raw_anchor_min - raw_frequency_hz) / (1.5 * anchor_span))
-            else:
-                interpolation_confidence = max(0.2, 1.0 - (raw_frequency_hz - raw_anchor_max) / (1.5 * anchor_span))
-        band_match_factor = 1.0 if matched_pair is not None else 0.45
-        candidate_confidence = float(max(0.15, min(1.0, confidence * interpolation_confidence * band_match_factor)))
+        sigma_hz = residual_model.sigma(raw_frequency_hz)
+        ci_hz = residual_model.confidence_interval(calibrated_frequency_hz, raw_frequency_hz)
+        extrapolation_penalty = residual_model.extrapolation_penalty(raw_frequency_hz)
+        band_match_factor = 1.0 if matched_pair is not None else 0.55
+        uncertainty_score = _clamp01(1.0 / (1.0 + sigma_hz / max(0.2 * residual_model.anchor_span_hz, 250.0)))
+        candidate_confidence = float(max(0.1, min(1.0, confidence * residual_model.confidence_score(raw_frequency_hz) * band_match_factor)))
         calibrated_rows.append(
             {
                 **row,
@@ -393,6 +516,10 @@ def _build_calibrated_l2_summary(
                 "calibrated_stopband_hz": None if calibrated_stopband_hz is None else list(calibrated_stopband_hz),
                 "matched_anchor_label": "" if matched_pair is None else str(matched_pair.get("label", "")),
                 "stopband_error_hz": stopband_error_hz,
+                "uncertainty_sigma_hz": sigma_hz,
+                "confidence_interval_hz": None if ci_hz is None else [float(ci_hz[0]), float(ci_hz[1])],
+                "extrapolation_penalty": extrapolation_penalty,
+                "uncertainty_score": uncertainty_score,
                 "calibration_confidence": candidate_confidence,
                 "calibration_source": source_label,
             }
@@ -401,6 +528,17 @@ def _build_calibrated_l2_summary(
     summary["candidates"] = calibrated_rows
     summary["frequency_map"] = {"slope": frequency_map.slope, "intercept": frequency_map.intercept}
     summary["width_map"] = {"scale": width_map.scale}
+    summary["residual_model"] = {
+        "residual_bias_hz": residual_model.residual_bias_hz,
+        "base_sigma_hz": residual_model.base_sigma_hz,
+        "leave_one_out_rmse_hz": residual_model.leave_one_out_rmse_hz,
+        "anchor_min_hz": residual_model.anchor_min_hz,
+        "anchor_max_hz": residual_model.anchor_max_hz,
+        "anchor_span_hz": residual_model.anchor_span_hz,
+        "penalty_slope_hz_per_span": residual_model.penalty_slope_hz_per_span,
+        "support": residual_model.support,
+        "confidence_level": residual_model.confidence_level,
+    }
     calibrated_stopbands_hz: list[dict[str, Any]] = []
     for idx, stopband in enumerate(l2_summary.get("stopbands_hz", []), start=1):
         raw_interval = (float(stopband.get("frequency_min_hz", 0.0)), float(stopband.get("frequency_max_hz", 0.0)))
@@ -469,6 +607,25 @@ def _plot_calibration_stopbands(
 
 
 
+def _plot_uncertainty(path: Path, calibrated_summary: dict[str, Any]) -> None:
+    rows = [dict(row) for row in calibrated_summary.get("candidates", [])]
+    fig = plt.figure(figsize=(7.2, 4.8))
+    ax = fig.add_subplot(111)
+    if rows:
+        x_values = [float(row.get("calibrated_frequency_hz", row.get("frequency_hz", 0.0))) for row in rows]
+        y_values = [float(row.get("uncertainty_sigma_hz", 0.0) or 0.0) for row in rows]
+        ax.scatter(x_values, y_values)
+        for row, x_value, y_value in zip(rows, x_values, y_values):
+            ax.annotate(f"gap {row.get('band_index')}", (x_value, y_value), fontsize=7)
+    ax.set_xlabel("Calibrated frequency (Hz)")
+    ax.set_ylabel("σ uncertainty (Hz)")
+    ax.set_title("Candidate-level calibration uncertainty")
+    fig.tight_layout()
+    fig.savefig(path, dpi=160)
+    plt.close(fig)
+
+
+
 def run_l2_l3_calibration(
     output_dir: str | Path,
     task: DiscoverTaskCard,
@@ -506,6 +663,7 @@ def run_l2_l3_calibration(
         previous_rmse = rmse
 
     width_map = _fit_width_scale(stopband_pairs, current_map)
+    residual_model, loo_records = _fit_residual_model(frequency_pairs, current_map)
     calibrated_stop_errors: list[float] = []
     raw_stop_errors: list[float] = []
     for pair in stopband_pairs:
@@ -516,42 +674,88 @@ def run_l2_l3_calibration(
         if calibrated_interval is not None:
             calibrated_stop_errors.extend([calibrated_interval[0] - target_interval[0], calibrated_interval[1] - target_interval[1]])
 
+    post_rmse = _rmse([(float(current_map.apply(pair["raw_frequency_hz"])), float(pair["l3_frequency_hz"])) for pair in frequency_pairs])
     passed_tools = sum(1 for proto in protocols if str(proto.get("status", "")).lower() == "passed")
-    confidence = min(1.0, 0.2 + 0.15 * len(frequency_pairs) + 0.1 * len(stopband_pairs) + 0.15 * passed_tools)
+    base_confidence = 0.15 + 0.16 * len(frequency_pairs) + 0.08 * len(stopband_pairs) + 0.12 * passed_tools
+    residual_scale = max(0.25 * residual_model.anchor_span_hz, 500.0)
+    residual_factor = float(max(0.15, exp(-post_rmse / residual_scale))) if frequency_pairs else 0.1
+    confidence = _clamp01(base_confidence * residual_factor)
     source_label = "tool-consensus" if passed_tools else "paper-anchor-fallback"
     if passed_tools == 0:
-        confidence = max(0.1, confidence - 0.35)
+        confidence = max(0.1, confidence * 0.55)
 
     calibrated_l2_summary = _build_calibrated_l2_summary(
         l2_summary,
         frequency_map=current_map,
         width_map=width_map,
+        residual_model=residual_model,
         frequency_pairs=frequency_pairs,
         stopband_pairs=stopband_pairs,
         confidence=confidence,
         source_label=source_label,
     )
 
+    candidate_uncertainty_rows = [
+        {
+            "band_index": row.get("band_index"),
+            "calibrated_frequency_hz": row.get("calibrated_frequency_hz", row.get("frequency_hz")),
+            "uncertainty_sigma_hz": row.get("uncertainty_sigma_hz"),
+            "confidence_interval_hz": row.get("confidence_interval_hz"),
+            "extrapolation_penalty": row.get("extrapolation_penalty"),
+            "uncertainty_score": row.get("uncertainty_score"),
+            "calibration_confidence": row.get("calibration_confidence"),
+        }
+        for row in calibrated_l2_summary.get("candidates", [])
+    ]
+
     summary = {
         "protocol_version": L3_PROTOCOL_VERSION,
         "frequency_map": {"slope": current_map.slope, "intercept": current_map.intercept},
         "width_map": {"scale": width_map.scale},
+        "residual_model": {
+            "residual_bias_hz": residual_model.residual_bias_hz,
+            "base_sigma_hz": residual_model.base_sigma_hz,
+            "leave_one_out_rmse_hz": residual_model.leave_one_out_rmse_hz,
+            "anchor_min_hz": residual_model.anchor_min_hz,
+            "anchor_max_hz": residual_model.anchor_max_hz,
+            "anchor_span_hz": residual_model.anchor_span_hz,
+            "penalty_slope_hz_per_span": residual_model.penalty_slope_hz_per_span,
+            "support": residual_model.support,
+            "confidence_level": residual_model.confidence_level,
+            "leave_one_out_records": loo_records,
+        },
         "iterations": iteration_records,
         "frequency_pairs": frequency_pairs,
         "stopband_pairs": stopband_pairs,
         "errors": {
             "pre_rmse_hz": pre_rmse,
-            "post_rmse_hz": _rmse([(float(current_map.apply(pair["raw_frequency_hz"])), float(pair["l3_frequency_hz"])) for pair in frequency_pairs]),
+            "post_rmse_hz": post_rmse,
             "pre_stopband_mae_hz": _mae(raw_stop_errors),
             "post_stopband_mae_hz": _mae(calibrated_stop_errors),
         },
         "confidence": confidence,
         "source": source_label,
         "normalized_tool_results": protocols,
+        "candidate_uncertainty": candidate_uncertainty_rows,
         "calibrated_l2_summary": calibrated_l2_summary,
     }
     write_json(output_dir / "calibration_summary.json", summary)
     write_json(output_dir / "calibrated_l2_summary.json", calibrated_l2_summary)
+    write_json(output_dir / "uncertainty_model.json", summary["residual_model"])
+    write_csv(
+        output_dir / "candidate_uncertainty.csv",
+        candidate_uncertainty_rows,
+        fieldnames=[
+            "band_index",
+            "calibrated_frequency_hz",
+            "uncertainty_sigma_hz",
+            "confidence_interval_hz",
+            "extrapolation_penalty",
+            "uncertainty_score",
+            "calibration_confidence",
+        ],
+    )
     _plot_calibration_frequencies(output_dir / "frequency_calibration.png", frequency_pairs, current_map)
     _plot_calibration_stopbands(output_dir / "stopband_calibration.png", stopband_pairs, current_map, width_map)
+    _plot_uncertainty(output_dir / "uncertainty_calibration.png", calibrated_l2_summary)
     return summary

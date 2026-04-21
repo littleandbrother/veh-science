@@ -58,8 +58,14 @@ required_artifacts:
   - gap_ranking.json
   - calibration_summary.json
   - calibrated_l2_summary.json
+  - uncertainty_model.json
+  - candidate_uncertainty.csv
   - appendix_package.md
   - mechanism_portfolio.json
+  - mechanism_solver_library.json
+  - negative_result_memory.json
+  - publication_bundle.json
+  - discussion_bundle.json
   - evidence_matrix.json
 replay_notes:
   - Start from finite-chain TR existence before adding piezoelectric coupling.

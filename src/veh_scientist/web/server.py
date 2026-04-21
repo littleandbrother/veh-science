@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
+from veh_scientist.discover.discussion import append_human_note
 from veh_scientist.discover.report import write_report_bundle
 from veh_scientist.discover.runner import DiscoveryRunner
 from veh_scientist.discover.smoke import run_regression_smoke
@@ -18,7 +19,7 @@ from veh_scientist.taskcard import parse_discover_task_card
 
 
 class DashboardHandler(BaseHTTPRequestHandler):
-    server_version = "VEHScienceDashboard/0.3"
+    server_version = "VEHScienceDashboard/0.4"
 
     def _json(self, payload: Any, status: int = HTTPStatus.OK) -> None:
         body = json.dumps(to_jsonable(payload), ensure_ascii=False).encode("utf-8")
@@ -75,6 +76,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
                         "best_gap_calibrated_hz": program.summary_metrics.get("best_gap_calibrated_hz"),
                         "smoke_pass": program.summary_metrics.get("smoke_pass"),
                         "calibration_source": program.summary_metrics.get("calibration_source"),
+                        "negative_memory_records": program.summary_metrics.get("negative_memory_records"),
+                        "publication_main_figures": program.summary_metrics.get("publication_main_figures"),
                     }
                 )
             except Exception:
@@ -117,7 +120,16 @@ class DashboardHandler(BaseHTTPRequestHandler):
             if not path.exists():
                 return self._json({"ok": False, "error": f"Program state not found: {path}"}, status=HTTPStatus.NOT_FOUND)
             return self._serve_static(path)
-        if parsed.path in {"/api/smoke", "/api/calibration", "/api/appendix", "/api/mechanisms"}:
+        if parsed.path in {
+            "/api/smoke",
+            "/api/calibration",
+            "/api/appendix",
+            "/api/mechanisms",
+            "/api/library",
+            "/api/memory",
+            "/api/publication",
+            "/api/discussion",
+        }:
             params = parse_qs(parsed.query)
             program, path = self._load_program_from_query(params)
             if program is None:
@@ -128,7 +140,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 return self._json({"ok": True, "calibration_summary": program.calibration_summary})
             if parsed.path == "/api/appendix":
                 return self._json({"ok": True, "appendix_summary": program.appendix_summary})
-            return self._json({"ok": True, "mechanism_portfolio": program.mechanism_portfolio})
+            if parsed.path == "/api/mechanisms":
+                return self._json({"ok": True, "mechanism_portfolio": program.mechanism_portfolio})
+            if parsed.path == "/api/library":
+                return self._json({"ok": True, "solver_library": program.solver_library})
+            if parsed.path == "/api/memory":
+                return self._json({"ok": True, "negative_memory": program.negative_memory})
+            if parsed.path == "/api/publication":
+                return self._json({"ok": True, "publication_bundle": program.publication_bundle})
+            return self._json({"ok": True, "discussion_bundle": program.discussion_bundle, "collaboration_log": program.collaboration_log})
         if parsed.path == "/artifact":
             params = parse_qs(parsed.query)
             requested = params.get("path", [""])[0]
@@ -161,7 +181,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             if not program_path.exists():
                 return self._json({"ok": False, "error": f"Program state not found: {program_path}"}, status=HTTPStatus.NOT_FOUND)
             program = load_program_state(program_path)
-            report_dir = Path(output_dir) / task_id / "08_reporting"
+            report_dir = Path(output_dir) / task_id / "10_reporting"
             bundle = write_report_bundle(report_dir, task, program)
             return self._json({"ok": True, "bundle": bundle})
         if parsed.path == "/api/run_smoke":
@@ -174,9 +194,26 @@ class DashboardHandler(BaseHTTPRequestHandler):
             if not program_path.exists():
                 return self._json({"ok": False, "error": f"Program state not found: {program_path}"}, status=HTTPStatus.NOT_FOUND)
             program = load_program_state(program_path)
-            smoke_dir = Path(output_dir) / task_id / "09_smoke"
+            smoke_dir = Path(output_dir) / task_id / "13_smoke"
             smoke_summary = run_regression_smoke(task, program, smoke_dir)
             return self._json({"ok": True, "smoke_summary": smoke_summary})
+        if parsed.path == "/api/discussion_note":
+            output_dir = payload.get("output_dir", self.server.default_output_dir)
+            task_card = payload.get("task_card", self.server.default_task_card)
+            task_path = resolve_path(task_card, base_dir=self.server.repo_root)
+            task = parse_discover_task_card(task_path)
+            task_id = payload.get("task_id", task.task_id)
+            program_path = Path(output_dir) / task_id / "program_state.json"
+            if not program_path.exists():
+                return self._json({"ok": False, "error": f"Program state not found: {program_path}"}, status=HTTPStatus.NOT_FOUND)
+            author = str(payload.get("author", "human"))
+            topic = str(payload.get("topic", "note"))
+            content = str(payload.get("content", "")).strip()
+            references = payload.get("references", [])
+            if not content:
+                return self._json({"ok": False, "error": "content must not be empty"}, status=HTTPStatus.BAD_REQUEST)
+            result = append_human_note(program_path, author=author, topic=topic, content=content, references=references)
+            return self._json({"ok": True, "result": result})
         return self._json({"ok": False, "error": f"Unknown route: {parsed.path}"}, status=HTTPStatus.NOT_FOUND)
 
     def _serve_static(self, path: Path, must_be_safe: bool = False) -> None:
@@ -210,6 +247,7 @@ class DashboardHTTPServer(ThreadingHTTPServer):
             return any(path.is_relative_to(root) for root in allowed_roots)
         except AttributeError:
             return any(str(path).startswith(str(root)) for root in allowed_roots)
+
 
 
 def serve_dashboard(

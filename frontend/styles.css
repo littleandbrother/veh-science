@@ -8,7 +8,7 @@ body {
   color: #111;
 }
 .layout {
-  max-width: 1180px;
+  max-width: 1240px;
   margin: 0 auto;
   padding: 24px;
 }
@@ -22,20 +22,30 @@ header {
   padding: 16px;
   margin-bottom: 16px;
 }
-.controls .grid2 {
+.controls .grid2,
+.grid3 {
   display: grid;
-  grid-template-columns: 1fr 1fr;
   gap: 12px;
+}
+.controls .grid2 {
+  grid-template-columns: 1fr 1fr;
+}
+.grid3 {
+  grid-template-columns: repeat(3, 1fr);
 }
 label span {
   display: block;
   font-size: 0.9rem;
   margin-bottom: 4px;
 }
-input {
+input,
+textarea {
   width: 100%;
   padding: 10px;
   box-sizing: border-box;
+}
+textarea {
+  resize: vertical;
 }
 .actions {
   margin-top: 12px;
@@ -118,19 +128,28 @@ a {
 .banner.fail {
   background: #ffd8d8;
 }
-@media (max-width: 700px) {
-  .controls .grid2 {
-    grid-template-columns: 1fr;
-  }
-}
-
 .link-row {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 8px;
 }
-
 .card p {
   margin-top: 0;
+}
+.discussion-form {
+  border: 1px dashed #d8d8d8;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+@media (max-width: 900px) {
+  .grid3 {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 700px) {
+  .controls .grid2 {
+    grid-template-columns: 1fr;
+  }
 }

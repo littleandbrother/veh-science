@@ -6,6 +6,7 @@ All module boundaries exchange these typed contracts.
 from .schemas import (
     BaselineSpec,
     CandidateDesignFamily,
+    CollaborationMessage,
     ClaimCard,
     CorpusDocument,
     CriticDecision,
@@ -39,6 +40,7 @@ from .schemas import (
 __all__ = [
     "BaselineSpec",
     "CandidateDesignFamily",
+    "CollaborationMessage",
     "ClaimCard",
     "CorpusDocument",
     "CriticDecision",

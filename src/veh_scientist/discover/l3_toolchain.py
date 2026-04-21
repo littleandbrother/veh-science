@@ -363,7 +363,10 @@ def run_l3_validation_suite(
             "summary": str(summary_path.resolve()),
             "calibration_summary": str((output_dir / "calibration" / "calibration_summary.json").resolve()),
             "calibrated_l2_summary": str((output_dir / "calibration" / "calibrated_l2_summary.json").resolve()),
+            "uncertainty_model": str((output_dir / "calibration" / "uncertainty_model.json").resolve()),
+            "candidate_uncertainty": str((output_dir / "calibration" / "candidate_uncertainty.csv").resolve()),
             "frequency_calibration": str((output_dir / "calibration" / "frequency_calibration.png").resolve()),
             "stopband_calibration": str((output_dir / "calibration" / "stopband_calibration.png").resolve()),
+            "uncertainty_calibration": str((output_dir / "calibration" / "uncertainty_calibration.png").resolve()),
         },
     }

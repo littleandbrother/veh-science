@@ -12,96 +12,91 @@ from veh_scientist.interfaces import DiscoverTaskCard, GapCandidate
 MECHANISM_LIBRARY: dict[str, dict[str, Any]] = {
     "truncation_resonance": {
         "display_name": "Truncation resonance",
-        "maturity": "solver_ready",
         "co_located_synergy": True,
         "strengths": [
             "boundary-localized high-Q mode inside a stop band",
-            "simultaneous attenuation and harvesting at the same frequency",
-            "direct bandgap placement via internal cell tuning",
+            "direct co-location of attenuation and harvesting",
+            "already calibrated against the replay anchors",
         ],
         "risks": [
-            "sensitive to boundary realization as δ→1",
-            "requires careful L2–L3 calibration for beam truth",
-        ],
-        "required_modules": ["l1_chain", "l2_beam", "l3_validation", "piezo_port"],
-        "next_experiments": [
-            "close L2–L3 calibration loop with COMSOL beam studies",
-            "map fabrication tolerances into calibrated gap uncertainty",
+            "performance collapses as δ→1",
+            "still depends on live L3 validation for final paper truth",
         ],
     },
     "defect_mode": {
         "display_name": "Defect mode",
-        "maturity": "portfolio_only",
         "co_located_synergy": True,
         "strengths": [
-            "strong localization at engineered defects",
-            "direct frequency targeting through defect placement and size",
+            "strong localization at a prescribed defect",
+            "good for explicit frequency targeting once a defect is manufacturable",
         ],
         "risks": [
             "requires explicit defect engineering",
-            "frequency placement is less portable than TR under boundary changes",
-        ],
-        "required_modules": ["supercell_solver", "defect_port_mapper", "l3_validation"],
-        "next_experiments": [
-            "add defect-supercell L1/L2 solver pair",
-            "compare defect localization efficiency versus TR on matched envelopes",
+            "less portable than TR under boundary changes",
         ],
     },
     "interface_state": {
         "display_name": "Topological/interface state",
-        "maturity": "portfolio_only",
         "co_located_synergy": True,
         "strengths": [
-            "robust interface localization when symmetry conditions are met",
-            "promising robustness to disorder and tolerances",
+            "localized interface state with good disorder tolerance",
+            "valuable comparator for robustness-focused harvesting studies",
         ],
         "risks": [
-            "requires phase/topology bookkeeping beyond current replay stack",
-            "not every engineering design admits a clean invariant-driven route",
-        ],
-        "required_modules": ["topological_invariants", "interface_solver", "l3_validation"],
-        "next_experiments": [
-            "add SSH-style beam and chain interfaces",
-            "benchmark robustness versus TR after calibration",
+            "needs topology-aware bookkeeping",
+            "design freedom is constrained by dimerization/interface rules",
         ],
     },
     "hybrid_tr_defect": {
-        "display_name": "Hybrid TR + defect mode",
-        "maturity": "conceptual",
+        "display_name": "Hybrid TR + defect",
         "co_located_synergy": True,
         "strengths": [
-            "can widen design space for multi-band harvesting",
-            "may sharpen localization while keeping bandgap attenuation",
+            "can unlock multi-band candidates",
+            "extends TR with explicit defect placement freedom",
         ],
         "risks": [
+            "mode interaction can split the target peak",
             "parameter space expands quickly",
-            "mode interaction can split or suppress target peaks",
-        ],
-        "required_modules": ["tr_solver", "defect_solver", "multiport_calibration"],
-        "next_experiments": [
-            "introduce controlled defect into calibrated TR beam candidate",
-            "measure peak splitting and bandwidth trade-off",
         ],
     },
     "hybrid_tr_interface": {
-        "display_name": "Hybrid TR + interface state",
-        "maturity": "conceptual",
+        "display_name": "Hybrid TR + interface",
         "co_located_synergy": True,
         "strengths": [
-            "offers a path toward robust edge localization with tunable band placement",
-            "could combine boundary asymmetry with topology-guided interface protection",
+            "combines band placement freedom with interface-style robustness",
+            "useful comparator when boundary and interface mechanisms overlap",
         ],
         "risks": [
-            "needs topology-aware continuous beam backend",
-            "boundary termination and interface state can interfere constructively or destructively",
+            "requires a more advanced beam backend",
+            "easy to over-claim robustness without topology-aware validation",
         ],
-        "required_modules": ["tr_solver", "interface_solver", "topological_invariants", "l3_validation"],
-        "next_experiments": [
-            "prototype dual-edge/interface unit-cell family",
-            "study whether TR anchors survive interface perturbations",
+    },
+    "local_resonance": {
+        "display_name": "Local resonance route",
+        "co_located_synergy": True,
+        "strengths": [
+            "natural low-frequency bandgap mechanism",
+            "good pathway when the target band lies below Bragg-scale gaps",
+        ],
+        "risks": [
+            "localized strain can stay trapped in local resonators rather than the harvesting port",
+            "requires route-specific scaling laws",
+        ],
+    },
+    "nonlinear_route": {
+        "display_name": "Nonlinear route",
+        "co_located_synergy": False,
+        "strengths": [
+            "amplitude-dependent tuning and bandwidth expansion",
+            "promising for nonstationary or large-amplitude inputs",
+        ],
+        "risks": [
+            "harder to certify with a single linear appendix",
+            "bistability and jump phenomena complicate ranking and review",
         ],
     },
 }
+
 
 
 def _band_text(best_gap: GapCandidate | None) -> str:
@@ -113,11 +108,13 @@ def _band_text(best_gap: GapCandidate | None) -> str:
     return f"Best current band is gap {best_gap.band_index} near {freq:.1f} Hz."
 
 
+
 def build_mechanism_portfolio(
     output_dir: str | Path,
     task: DiscoverTaskCard,
     ranked_gaps: list[GapCandidate],
     calibration_summary: dict[str, Any] | None = None,
+    solver_library: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     output_dir = ensure_dir(output_dir)
     best_gap = ranked_gaps[0] if ranked_gaps else None
@@ -125,48 +122,63 @@ def build_mechanism_portfolio(
     if task.engineering_task is not None:
         target_band = tuple(float(v) for v in task.engineering_task.frequency_target.band_of_interest)
 
+    library_rows = {row.get("mechanism_key"): dict(row) for row in (solver_library or {}).get("comparison", [])}
+    confidence = float((calibration_summary or {}).get("confidence", 0.0) or 0.0)
+
     entries: list[dict[str, Any]] = []
     for mechanism_key, meta in MECHANISM_LIBRARY.items():
-        solver_ready = meta["maturity"] == "solver_ready"
-        recommended = mechanism_key == task.mechanism_focus
-        fit_score = 0.0
-        if best_gap is not None:
-            fit_score = 0.35 * best_gap.target_band_score + 0.35 * best_gap.localization_score + 0.30 * best_gap.harvestability_score
-            if mechanism_key != task.mechanism_focus:
-                fit_score *= 0.82 if "hybrid" not in mechanism_key else 0.68
-        confidence = float((calibration_summary or {}).get("confidence", 0.0) or 0.0)
-        if mechanism_key != task.mechanism_focus:
-            confidence *= 0.65 if solver_ready else 0.35
+        row = library_rows.get(mechanism_key, {})
+        solver_status = row.get("solver_status", "portfolio_only")
+        maturity = row.get("maturity", "portfolio_only")
+        fit_score = float(row.get("target_band_score", 0.0) or 0.0)
+        localization = float(row.get("localization_score", 0.0) or 0.0)
+        harvesting = float(row.get("harvestability_proxy", 0.0) or 0.0)
+        suppression = float(row.get("suppression_proxy", 0.0) or 0.0)
+        review_pass = bool(row.get("review_pass", False))
+        calibration_confidence = confidence if mechanism_key == task.mechanism_focus else confidence * (0.7 if solver_status == "passed" else 0.35)
+        if not review_pass:
+            calibration_confidence *= 0.7
+        combined_fit = 0.35 * fit_score + 0.25 * localization + 0.20 * harvesting + 0.20 * suppression
+        if mechanism_key == task.mechanism_focus and best_gap is not None:
+            combined_fit = max(combined_fit, 0.4 * best_gap.target_band_score + 0.3 * best_gap.localization_score + 0.3 * best_gap.harvestability_score)
         entries.append(
             {
                 "mechanism_key": mechanism_key,
                 "display_name": meta["display_name"],
-                "maturity": meta["maturity"],
+                "maturity": maturity,
+                "solver_status": solver_status,
                 "co_located_synergy": meta["co_located_synergy"],
-                "fit_score": round(float(fit_score), 4),
-                "calibration_confidence": round(float(confidence), 4),
-                "recommended": recommended,
+                "fit_score": round(float(combined_fit), 4),
+                "target_band_score": round(float(fit_score), 4),
+                "localization_score": round(float(localization), 4),
+                "harvestability_proxy": round(float(harvesting), 4),
+                "suppression_proxy": round(float(suppression), 4),
+                "calibration_confidence": round(float(calibration_confidence), 4),
+                "review_pass": review_pass,
+                "recommended": mechanism_key == task.mechanism_focus,
                 "strengths": meta["strengths"],
                 "risks": meta["risks"],
-                "required_modules": meta["required_modules"],
-                "next_experiments": meta["next_experiments"],
                 "target_band_hz": None if target_band is None else list(target_band),
                 "best_gap_reference": None if best_gap is None else {
                     "band_index": best_gap.band_index,
                     "frequency_hz": best_gap.calibrated_frequency_hz or best_gap.anchored_frequency_hz or best_gap.raw_frequency_hz,
                     "matched_anchor": best_gap.matched_anchor_label,
                 },
+                "solver_package": None if mechanism_key not in (solver_library or {}) else None,
             }
         )
 
     ranked_entries = sorted(entries, key=lambda item: (-float(item["recommended"]), -float(item["fit_score"]), item["mechanism_key"]))
+    primary = ranked_entries[0]["mechanism_key"] if ranked_entries else task.mechanism_focus
+    secondary = [row["mechanism_key"] for row in ranked_entries[1:4]]
     recommended_path = {
-        "primary": ranked_entries[0]["mechanism_key"] if ranked_entries else task.mechanism_focus,
-        "secondary": [row["mechanism_key"] for row in ranked_entries[1:3]],
+        "primary": primary,
+        "secondary": secondary,
         "rationale": [
             _band_text(best_gap),
-            "Use truncation resonance as the calibrated baseline because it is the only solver-ready mechanism in the current stack.",
-            "Use defect/interface mechanisms as portfolio comparators and next-step expansion routes rather than replacing the calibrated TR core today.",
+            "Keep truncation resonance as the calibrated baseline if it remains competitive after uncertainty-aware ranking.",
+            "Use defect and interface routes as explicit comparators rather than as abstract future work.",
+            "Treat local resonance and nonlinear routes as exploratory branches whose code packs and audit trails already exist, but whose publication ranking still depends on route-specific validation.",
         ],
     }
     portfolio = {
@@ -174,7 +186,7 @@ def build_mechanism_portfolio(
         "mechanism_focus": task.mechanism_focus,
         "entries": ranked_entries,
         "recommended_path": recommended_path,
-        "portfolio_stage": "solver_ready_baseline_plus_portfolio_expansion",
+        "portfolio_stage": "calibrated_baseline_plus_solver_library",
     }
 
     roadmap_lines = [
@@ -191,16 +203,15 @@ def build_mechanism_portfolio(
     ]
     for row in ranked_entries:
         roadmap_lines.append(
-            f"- **{row['display_name']}** ({row['mechanism_key']}, maturity={row['maturity']}, fit={row['fit_score']:.3f}, calibration_confidence={row['calibration_confidence']:.3f})"
+            f"- **{row['display_name']}** ({row['mechanism_key']}, maturity={row['maturity']}, solver_status={row['solver_status']}, fit={row['fit_score']:.3f}, calibration_confidence={row['calibration_confidence']:.3f}, review_pass={row['review_pass']})"
         )
         roadmap_lines.append(f"  - strengths: {', '.join(row['strengths'])}")
         roadmap_lines.append(f"  - risks: {', '.join(row['risks'])}")
-        roadmap_lines.append(f"  - next: {', '.join(row['next_experiments'])}")
     roadmap_lines.extend([
         "",
         "## Combination-layer implication",
         "",
-        "The present codebase is calibrated enough to treat TR as the baseline mechanism. The next layer is not to discard TR, but to add comparable solvers for defect and interface routes so the system can choose mechanisms rather than replay a fixed one.",
+        "The codebase no longer treats alternative mechanisms as narrative placeholders only. Each route now has a surrogate solver result, a Python/MATLAB/COMSOL code pack, and an audit trail that can be inspected before live high-fidelity validation.",
     ])
 
     write_json(output_dir / "mechanism_portfolio.json", portfolio)

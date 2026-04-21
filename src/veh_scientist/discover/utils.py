@@ -129,6 +129,7 @@ def load_program_state(path: str | Path) -> Any:
 
     from veh_scientist.interfaces import (
         ClaimCard,
+        CollaborationMessage,
         CorpusDocument,
         DerivationCard,
         DiscoveryProgramState,
@@ -152,6 +153,7 @@ def load_program_state(path: str | Path) -> Any:
             "tool_runs",
             "artifacts",
             "evidence",
+            "collaboration_log",
         }},
         corpus_manifest=[_coerce_dataclass(CorpusDocument, item) for item in payload.get("corpus_manifest", [])],
         planned_steps=[_coerce_dataclass(DiscoveryStep, item) for item in payload.get("planned_steps", [])],
@@ -162,6 +164,7 @@ def load_program_state(path: str | Path) -> Any:
         tool_runs=[_coerce_dataclass(ToolRunRecord, item) for item in payload.get("tool_runs", [])],
         artifacts=[_coerce_dataclass(ExperimentArtifact, item) for item in payload.get("artifacts", [])],
         evidence=[_coerce_dataclass(EvidenceRecord, item) for item in payload.get("evidence", [])],
+        collaboration_log=[_coerce_dataclass(CollaborationMessage, item) for item in payload.get("collaboration_log", [])],
     )
 
 def update_step_status(steps: list[DiscoveryStep], stage: str, status: str) -> list[DiscoveryStep]:

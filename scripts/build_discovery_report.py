@@ -21,7 +21,7 @@ def main() -> int:
     task = parse_discover_task_card(task_path)
     task_id = args.task_id or task.task_id
     program = load_program_state(f"{args.output_dir}/{task_id}/program_state.json")
-    bundle = write_report_bundle(f"{args.output_dir}/{task_id}/08_reporting", task, program)
+    bundle = write_report_bundle(f"{args.output_dir}/{task_id}/10_reporting", task, program)
     print(json.dumps(to_jsonable(bundle), indent=2, ensure_ascii=False))
     return 0
 

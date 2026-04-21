@@ -10,12 +10,46 @@ from veh_scientist.discover.utils import write_json, write_text
 from veh_scientist.interfaces import DiscoverTaskCard, DiscoveryProgramState
 
 
+
 def artifact_manifest(program: DiscoveryProgramState) -> list[dict[str, Any]]:
     return [asdict(artifact) for artifact in program.artifacts]
 
 
+
 def _section(title: str) -> list[str]:
     return ["", f"## {title}", ""]
+
+
+
+def _format_gap(gap: Any) -> str:
+    parts = [
+        f"Gap {gap.band_index}",
+        f"Ω∈[{gap.omega_min:.4f}, {gap.omega_max:.4f}]",
+        f"score={gap.overall_score:.3f}",
+        f"TR={list(gap.tr_frequencies)}",
+    ]
+    if gap.raw_frequency_hz is not None:
+        parts.append(f"raw={gap.raw_frequency_hz:.3f} Hz")
+    if gap.anchored_frequency_hz is not None:
+        parts.append(f"anchored={gap.anchored_frequency_hz:.3f} Hz")
+    if gap.calibrated_frequency_hz is not None:
+        parts.append(f"calibrated={gap.calibrated_frequency_hz:.3f} Hz")
+    if gap.uncertainty_sigma_hz is not None:
+        parts.append(f"σ={gap.uncertainty_sigma_hz:.3f} Hz")
+    if gap.confidence_interval_hz is not None:
+        lo, hi = gap.confidence_interval_hz
+        parts.append(f"CI=[{lo:.3f}, {hi:.3f}] Hz")
+    if gap.stopband_error_hz is not None:
+        parts.append(f"stopband_error={gap.stopband_error_hz:.3f} Hz")
+    parts.append(f"uncertainty_score={gap.uncertainty_score:.3f}")
+    parts.append(f"calibration_confidence={gap.calibration_confidence:.3f}")
+    if gap.extrapolation_penalty:
+        parts.append(f"extrapolation_penalty={gap.extrapolation_penalty:.3f}")
+    if gap.matched_anchor_label:
+        parts.append(f"anchor={gap.matched_anchor_label}")
+        parts.append(f"anchor_score={gap.anchor_score:.3f}")
+    return ", ".join(parts)
+
 
 
 def build_report_markdown(task: DiscoverTaskCard, program: DiscoveryProgramState) -> str:
@@ -62,45 +96,37 @@ def build_report_markdown(task: DiscoverTaskCard, program: DiscoveryProgramState
         lines.append(f"- trace groups: **{appendix.get('n_trace_groups', 0)}**")
         lines.append(f"- limit cases: **{appendix.get('n_limit_cases', 0)}**")
         lines.append(f"- solver cross-checks: **{appendix.get('n_solver_cross_checks', 0)}**")
-        lines.append(f"- package path: `{appendix.get('appendix_package_path', '')}`")
-        lines.append(f"- bundle path: `{appendix.get('appendix_bundle_path', '')}`")
+        lines.append(f"- all checks pass: **{appendix.get('all_checks_pass', False)}**")
+        if appendix.get("appendix_package_path"):
+            lines.append(f"- package path: `{appendix.get('appendix_package_path', '')}`")
+        if appendix.get("appendix_bundle_path"):
+            lines.append(f"- bundle path: `{appendix.get('appendix_bundle_path', '')}`")
     else:
         lines.append("- No appendix summary recorded.")
 
     lines.extend(_section("Ranked gap candidates"))
     if program.gap_candidates:
         for gap in program.gap_candidates:
-            freq_note = []
-            if gap.raw_frequency_hz is not None:
-                freq_note.append(f"raw={gap.raw_frequency_hz:.3f} Hz")
-            if gap.anchored_frequency_hz is not None:
-                freq_note.append(f"anchored={gap.anchored_frequency_hz:.3f} Hz")
-            if gap.calibrated_frequency_hz is not None:
-                freq_note.append(f"calibrated={gap.calibrated_frequency_hz:.3f} Hz")
-            if gap.stopband_error_hz is not None:
-                freq_note.append(f"stopband_error={gap.stopband_error_hz:.3f} Hz")
-            if gap.calibration_source:
-                freq_note.append(f"calibration_source={gap.calibration_source}")
-            if gap.calibration_confidence:
-                freq_note.append(f"calibration_confidence={gap.calibration_confidence:.3f}")
-            anchor_note = f", anchor={gap.matched_anchor_label}, anchor_score={gap.anchor_score:.3f}" if gap.matched_anchor_label else ""
-            suffix = f", {'; '.join(freq_note)}" if freq_note else ""
-            lines.append(
-                f"- Gap {gap.band_index}: Ω∈[{gap.omega_min:.4f}, {gap.omega_max:.4f}], score={gap.overall_score:.3f}, TR={list(gap.tr_frequencies)}{anchor_note}{suffix}"
-            )
+            lines.append(f"- {_format_gap(gap)}")
     else:
         lines.append("- No ranked gap candidates.")
 
-    lines.extend(_section("L2–L3 calibration"))
+    lines.extend(_section("Uncertainty-aware L2–L3 calibration"))
     calibration = program.calibration_summary or {}
     if calibration:
         errors = calibration.get("errors", {})
+        residual_model = calibration.get("residual_model", {})
         lines.append(f"- source: **{calibration.get('source', '')}**")
-        lines.append(f"- confidence: **{calibration.get('confidence', 0.0):.3f}**")
-        lines.append(f"- pre RMSE (Hz): **{errors.get('pre_rmse_hz', 0.0):.3f}**")
-        lines.append(f"- post RMSE (Hz): **{errors.get('post_rmse_hz', 0.0):.3f}**")
-        lines.append(f"- pre stopband MAE (Hz): **{errors.get('pre_stopband_mae_hz', 0.0):.3f}**")
-        lines.append(f"- post stopband MAE (Hz): **{errors.get('post_stopband_mae_hz', 0.0):.3f}**")
+        lines.append(f"- confidence: **{float(calibration.get('confidence', 0.0) or 0.0):.3f}**")
+        lines.append(f"- pre RMSE (Hz): **{float(errors.get('pre_rmse_hz', 0.0) or 0.0):.3f}**")
+        lines.append(f"- post RMSE (Hz): **{float(errors.get('post_rmse_hz', 0.0) or 0.0):.3f}**")
+        lines.append(f"- pre stopband MAE (Hz): **{float(errors.get('pre_stopband_mae_hz', 0.0) or 0.0):.3f}**")
+        lines.append(f"- post stopband MAE (Hz): **{float(errors.get('post_stopband_mae_hz', 0.0) or 0.0):.3f}**")
+        lines.append(f"- residual bias (Hz): **{float(residual_model.get('residual_bias_hz', 0.0) or 0.0):.3f}**")
+        lines.append(f"- base σ (Hz): **{float(residual_model.get('base_sigma_hz', 0.0) or 0.0):.3f}**")
+        lines.append(f"- leave-one-out RMSE (Hz): **{float(residual_model.get('leave_one_out_rmse_hz', 0.0) or 0.0):.3f}**")
+        lines.append(f"- learned extrapolation slope: **{float(residual_model.get('penalty_slope_hz_per_span', 0.0) or 0.0):.3f}**")
+        lines.append(f"- uncertainty rows: **{len(calibration.get('candidate_uncertainty', []))}**")
         lines.append(f"- protocol: `{calibration.get('protocol_version', '')}`")
     else:
         lines.append("- No calibration summary recorded.")
@@ -129,10 +155,65 @@ def build_report_markdown(task: DiscoverTaskCard, program: DiscoveryProgramState
             lines.append(f"- rationale: {rationale}")
         for entry in portfolio.get("entries", []):
             lines.append(
-                f"- **{entry.get('display_name')}** ({entry.get('mechanism_key')}, maturity={entry.get('maturity')}, fit={entry.get('fit_score')}, calibration_confidence={entry.get('calibration_confidence')})"
+                f"- **{entry.get('display_name')}** ({entry.get('mechanism_key')}, maturity={entry.get('maturity')}, fit={entry.get('fit_score')}, calibration_confidence={entry.get('calibration_confidence')}, review_pass={entry.get('review_pass')})"
             )
     else:
         lines.append("- No mechanism portfolio recorded.")
+
+    lines.extend(_section("Multi-mechanism solver library"))
+    solver_library = program.solver_library or {}
+    if solver_library:
+        lines.append(f"- entries: **{len(solver_library.get('entries', []))}**")
+        lines.append(f"- codegen root: `{solver_library.get('codegen_root', '')}`")
+        lines.append(f"- calibration source: **{solver_library.get('calibration_source', '')}**")
+        for row in solver_library.get("comparison", []):
+            lines.append(
+                f"- **{row.get('mechanism_key')}** — maturity={row.get('maturity')}, solver_status={row.get('solver_status')}, target_band={row.get('target_band_score')}, review_pass={row.get('review_pass')}"
+            )
+    else:
+        lines.append("- No solver library recorded.")
+
+    lines.extend(_section("Negative-result memory"))
+    negative_memory = program.negative_memory or {}
+    if negative_memory:
+        summary = negative_memory.get("summary", {})
+        for key, value in summary.items():
+            lines.append(f"- {key}: **{value}**")
+        for record in negative_memory.get("records", [])[:12]:
+            lines.append(
+                f"- **[{record.get('category')}] {record.get('label')}** ({record.get('severity')}) — {record.get('lesson')}"
+            )
+    else:
+        lines.append("- No negative-result memory recorded.")
+
+    lines.extend(_section("Publication bundle"))
+    publication = program.publication_bundle or {}
+    if publication:
+        lines.append(f"- main figures: **{len(publication.get('main_figures', []))}**")
+        ablation = publication.get("ablation_tables", {})
+        lines.append(f"- ablation gap rows: **{ablation.get('counts', {}).get('gap_rows', 0)}**")
+        lines.append(f"- ablation calibration rows: **{ablation.get('counts', {}).get('calibration_rows', 0)}**")
+        lines.append(f"- ablation mechanism rows: **{ablation.get('counts', {}).get('mechanism_rows', 0)}**")
+        lines.append(f"- reproducibility bundle: `{publication.get('reproducibility', {}).get('bundle_path', '')}`")
+        lines.append(f"- reviewer manifest rows: **{publication.get('reviewer_manifest', {}).get('n_claim_rows', 0)}**")
+    else:
+        lines.append("- No publication bundle recorded.")
+
+    lines.extend(_section("Discussion bundle / human-in-the-loop"))
+    discussion = program.discussion_bundle or {}
+    if discussion:
+        lines.append(f"- primary mechanism: **{discussion.get('primary_mechanism', '')}**")
+        lines.append(f"- best gap: **{discussion.get('best_gap', '')}**")
+        lines.append(f"- generated discussion roles: **{len(discussion.get('generated_messages', []))}**")
+        lines.append(f"- human notes: **{len(discussion.get('human_messages', []))}**")
+        for message in discussion.get("generated_messages", [])[:6]:
+            lines.append(f"- **{message.get('role')}** ({message.get('topic')}): {message.get('content')}")
+        if discussion.get("human_messages"):
+            lines.append("- Human notes:")
+            for message in discussion.get("human_messages", [])[:8]:
+                lines.append(f"  - **{message.get('author') or 'human'}** ({message.get('topic')}): {message.get('content')}")
+    else:
+        lines.append("- No discussion bundle recorded.")
 
     lines.extend(_section("Tool runs"))
     for run in program.tool_runs:
@@ -153,6 +234,7 @@ def build_report_markdown(task: DiscoverTaskCard, program: DiscoveryProgramState
         for warning in program.warnings:
             lines.append(f"- {warning}")
     return "\n".join(lines)
+
 
 
 def write_report_bundle(output_dir: str | Path, task: DiscoverTaskCard, program: DiscoveryProgramState) -> dict[str, str]:

@@ -20,7 +20,8 @@ class GapRankingWeights:
     realizability: float = 0.08
     target_band: float = 0.14
     anchor: float = 0.12
-    l3_alignment: float = 0.10
+    l3_alignment: float = 0.08
+    uncertainty: float = 0.06
 
 
 
@@ -35,9 +36,10 @@ def score_gap_candidate(candidate: GapCandidate, weights: GapRankingWeights | No
         + weights.target_band * candidate.target_band_score
         + weights.anchor * candidate.anchor_score
         + weights.l3_alignment * candidate.l3_alignment_score
+        + weights.uncertainty * candidate.uncertainty_score
     )
-    alignment_gate = 0.55 + 0.25 * candidate.calibration_confidence + 0.10 * candidate.target_band_score + 0.10 * candidate.anchor_score
-    score = base_score * alignment_gate
+    alignment_gate = 0.50 + 0.22 * candidate.calibration_confidence + 0.10 * candidate.target_band_score + 0.08 * candidate.anchor_score + 0.10 * candidate.uncertainty_score
+    score = base_score * alignment_gate * max(0.2, 1.0 - 0.6 * candidate.extrapolation_penalty)
     return round(float(score), 8)
 
 
@@ -49,7 +51,7 @@ def rank_gap_candidates(candidates: Iterable[GapCandidate], weights: GapRankingW
         scored,
         key=lambda cand: (
             -cand.overall_score,
-            -(cand.anchor_score + cand.target_band_score + cand.localization_score + cand.calibration_confidence),
+            -(cand.anchor_score + cand.target_band_score + cand.localization_score + cand.calibration_confidence + cand.uncertainty_score),
             cand.band_index,
             cand.omega_min,
         ),
@@ -136,11 +138,18 @@ def build_gap_candidates(
             stopband_error_hz = raw.get("stopband_error_hz")
             raw_stopband_hz = raw.get("raw_stopband_hz")
             calibrated_stopband_hz = raw.get("calibrated_stopband_hz")
+            uncertainty_sigma_hz = raw.get("uncertainty_sigma_hz")
+            confidence_interval_hz = raw.get("confidence_interval_hz")
+            extrapolation_penalty = float(raw.get("extrapolation_penalty", 0.0) or 0.0)
+            uncertainty_score = float(raw.get("uncertainty_score", 0.0) or 0.0)
             calibration_confidence = float(raw.get("calibration_confidence", (calibration_summary or {}).get("confidence", 0.0) or 0.0))
             if post_rmse > 0.0:
                 calibration_confidence = _clamp01(
                     calibration_confidence * max(0.2, 1.0 - post_rmse / max(anchored_frequency_hz or 1.0, 500.0))
                 )
+            calibration_confidence = _clamp01(calibration_confidence * max(0.35, 1.0 - 0.5 * extrapolation_penalty))
+            if uncertainty_score <= 0.0 and uncertainty_sigma_hz is not None:
+                uncertainty_score = _clamp01(1.0 / (1.0 + float(uncertainty_sigma_hz) / max(0.2 * (anchored_frequency_hz or 1000.0), 250.0)))
             l3_align = min(_l3_alignment_score(int(raw["band_index"]), anchor_label, l3_summary, anchor_s), calibration_confidence if calibration_confidence > 0 else 1.0)
             notes: list[str] = []
             if anchor_label:
@@ -151,6 +160,10 @@ def build_gap_candidates(
                 notes.append(f"anchored_frequency_hz={anchored_frequency_hz:.3f}")
             if stopband_error_hz is not None:
                 notes.append(f"stopband_error_hz={float(stopband_error_hz):.3f}")
+            if uncertainty_sigma_hz is not None:
+                notes.append(f"uncertainty_sigma_hz={float(uncertainty_sigma_hz):.3f}")
+            if extrapolation_penalty > 0.0:
+                notes.append(f"extrapolation_penalty={extrapolation_penalty:.3f}")
             candidates.append(
                 GapCandidate(
                     band_index=int(raw["band_index"]),
@@ -165,6 +178,10 @@ def build_gap_candidates(
                     raw_stopband_hz=None if raw_stopband_hz is None else tuple(float(v) for v in raw_stopband_hz),
                     calibrated_stopband_hz=None if calibrated_stopband_hz is None else tuple(float(v) for v in calibrated_stopband_hz),
                     stopband_error_hz=None if stopband_error_hz is None else float(stopband_error_hz),
+                    uncertainty_sigma_hz=None if uncertainty_sigma_hz is None else float(uncertainty_sigma_hz),
+                    confidence_interval_hz=None if confidence_interval_hz is None else tuple(float(v) for v in confidence_interval_hz),
+                    extrapolation_penalty=extrapolation_penalty,
+                    uncertainty_score=uncertainty_score,
                     calibration_confidence=calibration_confidence,
                     calibration_source=str(raw.get("calibration_source", (calibration_summary or {}).get("source", ""))),
                     matched_anchor_label=anchor_label,
@@ -208,6 +225,7 @@ def build_gap_candidates(
                 target_band_score=target_score,
                 anchor_score=anchor_s,
                 l3_alignment_score=anchor_s,
+                uncertainty_score=0.5,
                 notes=("l1_fallback",),
             )
         )

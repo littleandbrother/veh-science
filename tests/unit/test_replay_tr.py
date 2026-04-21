@@ -10,7 +10,7 @@ def test_discovery_runner_builds_replay_program() -> None:
     program = runner.plan()
     assert program.mode == "replay"
     assert program.corpus_manifest[0].role == "target_paper"
-    assert len(program.planned_steps) == 9
+    assert len(program.planned_steps) == 13
     assert len(program.claim_graph) >= 5
     assert len(program.hypotheses) == 5
     assert len(program.derivations) == 6

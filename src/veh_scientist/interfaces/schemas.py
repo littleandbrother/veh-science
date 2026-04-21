@@ -179,9 +179,13 @@ class DiscoveryStep:
         "hypotheses",
         "derivations",
         "experiments",
-        "gap_design",
         "verification",
+        "gap_design",
+        "mechanisms",
+        "memory",
         "reporting",
+        "publication",
+        "discussion",
         "smoke",
     ] = "corpus"
     title: str = ""
@@ -255,7 +259,7 @@ class ExperimentArtifact:
     """A generated artifact in the discovery program."""
     artifact_id: str = field(default_factory=lambda: _gen_id("ART-"))
     label: str = ""
-    artifact_type: Literal["figure", "table", "dataset", "code", "report", "equation", "note"] = "figure"
+    artifact_type: Literal["figure", "table", "dataset", "code", "report", "equation", "note", "bundle", "prompt"] = "figure"
     path: str = ""
     description: str = ""
     generated_by: str = ""
@@ -290,6 +294,10 @@ class GapCandidate:
     raw_stopband_hz: tuple[float, float] | None = None
     calibrated_stopband_hz: tuple[float, float] | None = None
     stopband_error_hz: float | None = None
+    uncertainty_sigma_hz: float | None = None
+    confidence_interval_hz: tuple[float, float] | None = None
+    extrapolation_penalty: float = 0.0
+    uncertainty_score: float = 0.0
     calibration_confidence: float = 0.0
     calibration_source: str = ""
     matched_anchor_label: str = ""
@@ -305,6 +313,21 @@ class GapCandidate:
     notes: tuple[str, ...] = ()
 
 
+
+
+@dataclass(frozen=True)
+class CollaborationMessage:
+    """A reviewable discussion or human note attached to a discovery run."""
+
+    message_id: str = field(default_factory=lambda: _gen_id("MSG-"))
+    role: Literal["planner", "theorist", "numerics", "skeptic", "reviewer", "editor", "human"] = "human"
+    author: str = ""
+    topic: str = ""
+    content: str = ""
+    references: tuple[str, ...] = ()
+    timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
+
+
 @dataclass
 class DiscoveryProgramState:
     """State container for the replay/discover orchestration layer."""
@@ -318,9 +341,13 @@ class DiscoveryProgramState:
         "hypotheses",
         "derivations",
         "experiments",
-        "gap_design",
         "verification",
+        "gap_design",
+        "mechanisms",
+        "memory",
         "reporting",
+        "publication",
+        "discussion",
         "smoke",
         "completed",
     ] = "planned"
@@ -340,6 +367,11 @@ class DiscoveryProgramState:
     calibration_summary: dict[str, Any] = field(default_factory=dict)
     appendix_summary: dict[str, Any] = field(default_factory=dict)
     mechanism_portfolio: dict[str, Any] = field(default_factory=dict)
+    solver_library: dict[str, Any] = field(default_factory=dict)
+    negative_memory: dict[str, Any] = field(default_factory=dict)
+    publication_bundle: dict[str, Any] = field(default_factory=dict)
+    discussion_bundle: dict[str, Any] = field(default_factory=dict)
+    collaboration_log: list[CollaborationMessage] = field(default_factory=list)
     smoke_summary: dict[str, Any] = field(default_factory=dict)
     output_dir: str = ""
     current_focus: str | None = None
